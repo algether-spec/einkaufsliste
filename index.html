@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8" />
+    <title>Einkaufsliste</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <style>
+        :root {
+            --bg: #f3f4f6;
+            --card: #ffffff;
+            --primary: #2563eb;
+            --done: #9ca3af;
+        }
+
+        * {
+            box-sizing: border-box;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            display: flex;
+            justify-content: center;
+        }
+
+
+        
+.app {
+    width: 100%;
+    max-width: 480px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+
+    background: var(--bg);
+    border-radius: 20px;
+    border: 1px solid #e5e7eb;
+
+    box-shadow:
+        0 10px 30px rgba(0,0,0,0.06),
+        0 1px 4px rgba(0,0,0,0.04);
+
+    margin: 16px;
+}
+
+header {
+    background: #f9fafb;          /* leicht dunkler als vorher */
+    padding: 20px 16px;
+    text-align: center;
+    font-size: 20px;
+    font-weight: 600;
+    border-bottom: 1px solid #e5e7eb;
+    position: relative;
+}
+
+
+        
+        main {
+            flex: 1;
+            padding: 16px;
+        }
+
+        .input-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        input {
+            flex: 1;
+            padding: 14px;
+            font-size: 16px;
+            border-radius: 12px;
+            border: 1px solid #d1d5db;
+        }
+
+        button {
+            padding: 14px;
+            border-radius: 12px;
+            border: none;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .add {
+            background: var(--primary);
+            color: white;
+        }
+
+        .mic {
+            background: #e5e7eb;
+        }
+
+
+        /* 🎤 Mikrofon aktiv */
+        button.mic.active {
+    background: rgba(220, 38, 38, 0.15); /* leichtes Rot */
+    color: #b91c1c;
+}
+
+
+        ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+
+li {
+    background: var(--card);
+    padding: 14px;
+    border-radius: 14px;
+    margin-bottom: 8px;
+
+    display: flex;
+    align-items: center;
+}
+
+/* TEXT LINKS */
+li span {
+    flex: 1;              /* nimmt den ganzen Platz links */
+    text-align: left;
+}
+
+/* CHECKBOX RECHTS */
+li input[type="checkbox"] {
+    margin-left: auto;    /* schiebt Checkbox ganz nach rechts */
+    width: 20px;
+    height: 20px;
+}
+
+        li.erledigt span {
+            text-decoration: line-through;
+            color: var(--done);
+        }
+
+        nav {
+            display: flex;
+            background: var(--card);
+            border-top: 1px solid #e5e7eb;
+        }
+
+
+     
+nav button {
+    flex: 1;
+    background: none;
+    padding: 14px;
+    font-size: 16px;
+}
+
+nav button.active {
+    background: rgba(37, 99, 235, 0.12); /* dezentes Blau */
+    color: var(--primary);
+    font-weight: 600;
+}
+
+
+        
+   /* Eingabezeile im Einkaufsmodus ausblenden */
+body.modus-einkaufen .input-row {
+    display: none;
+}
+header {
+    position: relative;
+}
+
+.badge-free {
+    margin-left: 8px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.06);
+    color: #374151;
+    vertical-align: middle;
+}
+
+.mic-active {
+    background-color: #ff4444 !important;
+    color: white;
+    border-radius: 50%;
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.6); }
+    70% { box-shadow: 0 0 0 12px rgba(255, 0, 0, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0); }
+}
+
+   </style>
+</head>
+
+<body>
+<div class="app">
+    <header>
+    Einkaufsliste
+    <span class="badge-free">FREE</span>
+</header>
+
+
+
+
+
+    <main>
+        <div class="input-row">
+            <input id="eingabe" placeholder="Artikel hinzufügen …" />
+            <button class="mic" id="mikrofon">🎤</button>
+            <button class="add" id="hinzufuegen">+</button>
+        </div>
+        <ul id="liste"></ul>
+    </main>
+<nav>
+    <button id="btnErfassen" class="active">Erfassen</button>
+    <button id="btnEinkaufen">Einkaufen</button>
+    <button id="btnExport">Export</button>
+</nav>
+
+ 
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
