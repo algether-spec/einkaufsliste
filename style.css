@@ -86,6 +86,9 @@ button:hover {
     background: var(--primary);
     color: white;
 }
+body.modus-einkaufen .input-row {
+    display: none !important;
+}
 
 /* Mikrofon */
 .mic {

@@ -84,10 +84,9 @@ function setModus(neu) {
             ? "Einkaufsliste – Erfassen"
             : "Einkaufsliste – Einkaufen";
 
-    document.body.classList.toggle(
-        "modus-einkaufen",
-        neu === "einkaufen"
-    );
+    // 👉 Body-Klassen sauber setzen
+    document.body.classList.remove("modus-erfassen", "modus-einkaufen");
+    document.body.classList.add("modus-" + neu);
 
     if (neu === "erfassen") {
         liste.querySelectorAll(".erledigt").forEach(li => li.remove());
@@ -95,8 +94,11 @@ function setModus(neu) {
     }
 }
 
+
 btnErfassen.onclick = () => setModus("erfassen");
 btnEinkaufen.onclick = () => setModus("einkaufen");
+
+
 
 /* ======================
    HINZUFÜGEN
@@ -187,6 +189,31 @@ btnExport.onclick = async () => {
         alert("Text in Zwischenablage kopiert.");
     }
 };
+// Mikrofon stoppen, wenn Tab/App verlassen wird
+document.addEventListener("visibilitychange", () => {
+    if (document.hidden && recog && isListening) {
+        recog.stop();
+        isListening = false;
+        mikrofon.classList.remove("mic-active");
+    }
+});
+
+// Mikrofon nach 10 Sekunden automatisch stoppen
+setInterval(() => {
+    if (isListening && recog) {
+        recog.stop();
+        isListening = false;
+        mikrofon.classList.remove("mic-active");
+    }
+}, 10000);
+
+document.addEventListener("visibilitychange", () => {
+    if (document.hidden && recog && isListening) {
+        recog.stop();
+        isListening = false;
+        mikrofon.classList.remove("mic-active");
+    }
+});
 
 /* ======================
    START

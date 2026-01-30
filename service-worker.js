@@ -1,4 +1,4 @@
-const CACHE_NAME = "einkaufsliste-cache-v5";
+const CACHE_NAME = "einkaufsliste-cache-v7";
 
 const FILES_TO_CACHE = [
   "./",
