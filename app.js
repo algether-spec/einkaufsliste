@@ -198,22 +198,28 @@ document.addEventListener("visibilitychange", () => {
     }
 });
 
-// Mikrofon nach 10 Sekunden automatisch stoppen
+// Mikrofon nach 10 Sekunden automatisch stoppen (robust)
 setInterval(() => {
     if (isListening && recog) {
-        recog.stop();
+        try {
+            recog.abort();  // 👉 Bricht auch hängende Aufnahmen ab
+        } catch {}
         isListening = false;
         mikrofon.classList.remove("mic-active");
     }
 }, 10000);
 
+
 document.addEventListener("visibilitychange", () => {
     if (document.hidden && recog && isListening) {
-        recog.stop();
+        try {
+            recog.abort();
+        } catch {}
         isListening = false;
         mikrofon.classList.remove("mic-active");
     }
 });
+
 
 /* ======================
    START
