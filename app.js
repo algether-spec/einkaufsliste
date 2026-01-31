@@ -1,121 +1,7 @@
 /* ======================
-   GRUNDZUSTAND
+   SPRACHEINGABE (NEU)
 ====================== */
-let modus = "erfassen";
 
-/* ======================
-   DOM-ELEMENTE
-====================== */
-const eingabe = document.getElementById("eingabe");
-const btnAdd = document.getElementById("hinzufuegen");
-const liste = document.getElementById("liste");
-const mikrofon = document.getElementById("mikrofon");
-
-const btnErfassen = document.getElementById("btnErfassen");
-const btnEinkaufen = document.getElementById("btnEinkaufen");
-const headerTitel = document.querySelector("header");
-
-/* ======================
-   SPEICHERN / LADEN
-====================== */
-function speichern() {
-    const daten = [];
-    liste.querySelectorAll("li").forEach(li => {
-        daten.push({
-            text: li.querySelector("span").textContent,
-            erledigt: li.classList.contains("erledigt")
-        });
-    });
-    localStorage.setItem("einkaufsliste", JSON.stringify(daten));
-}
-
-function laden() {
-    const daten = JSON.parse(localStorage.getItem("einkaufsliste")) || [];
-    daten.forEach(e => eintragAnlegen(e.text, e.erledigt));
-}
-
-/* ======================
-   EINTRAG ANLEGEN
-====================== */
-function eintragAnlegen(text, erledigt = false) {
-    const li = document.createElement("li");
-
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.checked = erledigt;
-
-    const span = document.createElement("span");
-    span.textContent = text;
-
-    if (erledigt) li.classList.add("erledigt");
-
-    checkbox.onchange = () => {
-        if (modus !== "einkaufen") {
-            checkbox.checked = !checkbox.checked;
-            return;
-        }
-        li.classList.toggle("erledigt", checkbox.checked);
-        speichern();
-    };
-
-    span.onclick = () => {
-        if (modus !== "einkaufen") return;
-        checkbox.checked = !checkbox.checked;
-        li.classList.toggle("erledigt", checkbox.checked);
-        speichern();
-    };
-
-    li.appendChild(span);
-    li.appendChild(checkbox);
-    liste.appendChild(li);
-}
-
-/* ======================
-   MODUS WECHSEL
-====================== */
-function setModus(neu) {
-    modus = neu;
-
-    btnErfassen.classList.toggle("active", neu === "erfassen");
-    btnEinkaufen.classList.toggle("active", neu === "einkaufen");
-
-    headerTitel.textContent =
-        neu === "erfassen"
-            ? "Einkaufsliste – Erfassen"
-            : "Einkaufsliste – Einkaufen";
-
-    // 👉 Body-Klassen sauber setzen
-    document.body.classList.remove("modus-erfassen", "modus-einkaufen");
-    document.body.classList.add("modus-" + neu);
-
-    if (neu === "erfassen") {
-        liste.querySelectorAll(".erledigt").forEach(li => li.remove());
-        speichern();
-    }
-}
-
-
-btnErfassen.onclick = () => setModus("erfassen");
-btnEinkaufen.onclick = () => setModus("einkaufen");
-
-
-
-/* ======================
-   HINZUFÜGEN
-====================== */
-btnAdd.onclick = () => {
-    const text = eingabe.value.trim();
-    if (!text) return;
-
-    eintragAnlegen(text);
-    speichern();
-    eingabe.value = "";
-};
-
-
-/* ======================
-   SPRACHEINGABE
-====================== */
 let recog = null;
 let isListening = false;
 
@@ -125,13 +11,15 @@ const SpeechRecognition =
 if (SpeechRecognition) {
     recog = new SpeechRecognition();
     recog.lang = "de-DE";
-    recog.interimResults = false;
-    recog.continuous = false;
+
+    // 👉 Live-Erkennung aktivieren
+    recog.interimResults = true;
+    recog.continuous = true;
 
     mikrofon.onclick = async () => {
         if (modus !== "erfassen") return;
 
-        // 👉 Verhindert Fehlermeldung bei erneutem Klick
+        // Doppelklick verhindern
         if (isListening) return;
 
         try {
@@ -146,8 +34,21 @@ if (SpeechRecognition) {
         }
     };
 
+    // 👉 Live-Text + sofortiges Einfügen bei finalem Ergebnis
     recog.onresult = e => {
-        eingabe.value = e.results[0][0].transcript;
+        const last = e.results.length - 1;
+        const result = e.results[last];
+        const text = result[0].transcript;
+
+        // Live-Vorschau im Eingabefeld
+        eingabe.value = text;
+
+        // Wenn final → sofort in Liste übernehmen
+        if (result.isFinal) {
+            eintragAnlegen(text);
+            speichern();
+            eingabe.value = "";
+        }
     };
 
     recog.onerror = () => {
@@ -156,73 +57,35 @@ if (SpeechRecognition) {
     };
 
     recog.onend = () => {
+        // Bei continuous=true startet Chrome manchmal neu → wir kontrollieren das
         isListening = false;
         mikrofon.classList.remove("mic-active");
     };
+
 } else {
     mikrofon.disabled = true;
 }
 
 
-
-
 /* ======================
-   EXPORT (NUR TEXT)
+   ROBUSTHEIT
 ====================== */
-const btnExport = document.getElementById("btnExport");
 
-btnExport.onclick = async () => {
-    let text = "Einkaufsliste\n\n";
-
-    liste.querySelectorAll("li").forEach(li => {
-        const name = li.querySelector("span").textContent;
-        const erledigt = li.classList.contains("erledigt");
-        text += `${erledigt ? "[x]" : "[ ]"} ${name}\n`;
-    });
-
-    if (navigator.share) {
-        await navigator.share({
-            text: text   // nur Text → Nachrichten
-        });
-    } else {
-        await navigator.clipboard.writeText(text);
-        alert("Text in Zwischenablage kopiert.");
-    }
-};
 // Mikrofon stoppen, wenn Tab/App verlassen wird
 document.addEventListener("visibilitychange", () => {
     if (document.hidden && recog && isListening) {
-        recog.stop();
+        try { recog.abort(); } catch {}
         isListening = false;
         mikrofon.classList.remove("mic-active");
     }
 });
 
-// Mikrofon nach 10 Sekunden automatisch stoppen (robust)
+// Sicherheit: nach 10 Sekunden abbrechen
 setInterval(() => {
     if (isListening && recog) {
-        try {
-            recog.abort();  // 👉 Bricht auch hängende Aufnahmen ab
-        } catch {}
+        try { recog.abort(); } catch {}
         isListening = false;
         mikrofon.classList.remove("mic-active");
     }
 }, 10000);
-
-
-document.addEventListener("visibilitychange", () => {
-    if (document.hidden && recog && isListening) {
-        try {
-            recog.abort();
-        } catch {}
-        isListening = false;
-        mikrofon.classList.remove("mic-active");
-    }
-});
-
-
-/* ======================
-   START
-====================== */
-laden();
 
