@@ -7,12 +7,11 @@
 
     <link rel="stylesheet" href="style.css">
 
-    <!-- Manifest korrekt eingebunden -->
+    <!-- Manifest -->
     <link rel="manifest" href="/einkaufsliste/manifest.json">
-
     <meta name="theme-color" content="#2563eb">
 
-    <!-- Service Worker korrekt registriert -->
+    <!-- Service Worker -->
     <script>
         if ("serviceWorker" in navigator) {
             navigator.serviceWorker.register("/einkaufsliste/service-worker.js");
@@ -22,18 +21,30 @@
 
 <body>
 <div class="app">
+
     <header>
         Einkaufsliste
         <span class="badge-free">FREE</span>
     </header>
 
     <main>
+
+        <!-- Einzel-Eingabe -->
         <div class="input-row">
             <input id="eingabe" placeholder="Artikel hinzufügen …" />
-            <button class="mic" id="mikrofon">🎤</button>
             <button class="add" id="hinzufuegen">+</button>
         </div>
+
+        <!-- Mehrzeilen-Eingabe -->
+        <div class="multi-box">
+            <label class="multi-label">Mehrere Artikel auf einmal</label>
+            <textarea id="multiInput" placeholder="Jede Zeile = ein Artikel"></textarea>
+            <button id="multiAdd" class="add">Alle hinzufügen</button>
+        </div>
+
+        <!-- Liste -->
         <ul id="liste"></ul>
+
     </main>
 
     <nav>
@@ -41,6 +52,7 @@
         <button id="btnEinkaufen">Einkaufen</button>
         <button id="btnExport">Export</button>
     </nav>
+
 </div>
 
 <script src="app.js"></script>

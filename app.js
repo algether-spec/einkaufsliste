@@ -1,91 +1,157 @@
 /* ======================
-   SPRACHEINGABE (NEU)
+   DOM ELEMENTE
 ====================== */
 
-let recog = null;
-let isListening = false;
+const eingabe = document.getElementById("eingabe");
+const hinzufuegen = document.getElementById("hinzufuegen");
+const liste = document.getElementById("liste");
 
-const SpeechRecognition =
-    window.SpeechRecognition || window.webkitSpeechRecognition;
+const btnErfassen = document.getElementById("btnErfassen");
+const btnEinkaufen = document.getElementById("btnEinkaufen");
+const btnExport = document.getElementById("btnExport");
 
-if (SpeechRecognition) {
-    recog = new SpeechRecognition();
-    recog.lang = "de-DE";
+const multiInput = document.getElementById("multiInput");
+const multiAdd = document.getElementById("multiAdd");
 
-    // 👉 Live-Erkennung aktivieren
-    recog.interimResults = true;
-    recog.continuous = true;
+let modus = "erfassen"; // oder "einkaufen"
 
-    mikrofon.onclick = async () => {
-        if (modus !== "erfassen") return;
 
-        // Doppelklick verhindern
-        if (isListening) return;
+/* ======================
+   SPEICHERN & LADEN
+====================== */
 
-        try {
-            await navigator.mediaDevices.getUserMedia({ audio: true });
+function speichern() {
+    const daten = [];
 
-            isListening = true;
-            mikrofon.classList.add("mic-active");
-            recog.start();
-        } catch {
-            mikrofon.classList.remove("mic-active");
-            alert("❌ Mikrofon nicht erlaubt");
-        }
-    };
+    liste.querySelectorAll("li").forEach(li => {
+        daten.push({
+            text: li.dataset.text,
+            erledigt: li.classList.contains("erledigt")
+        });
+    });
 
-    // 👉 Live-Text + sofortiges Einfügen bei finalem Ergebnis
-    recog.onresult = e => {
-        const last = e.results.length - 1;
-        const result = e.results[last];
-        const text = result[0].transcript;
+    localStorage.setItem("einkaufsliste", JSON.stringify(daten));
+}
 
-        // Live-Vorschau im Eingabefeld
-        eingabe.value = text;
+function laden() {
+    const raw = localStorage.getItem("einkaufsliste");
+    if (!raw) return;
 
-        // Wenn final → sofort in Liste übernehmen
-        if (result.isFinal) {
-            eintragAnlegen(text);
-            speichern();
-            eingabe.value = "";
-        }
-    };
-
-    recog.onerror = () => {
-        isListening = false;
-        mikrofon.classList.remove("mic-active");
-    };
-
-    recog.onend = () => {
-        // Bei continuous=true startet Chrome manchmal neu → wir kontrollieren das
-        isListening = false;
-        mikrofon.classList.remove("mic-active");
-    };
-
-} else {
-    mikrofon.disabled = true;
+    try {
+        const daten = JSON.parse(raw);
+        daten.forEach(e => eintragAnlegen(e.text, e.erledigt));
+    } catch (err) {
+        console.warn("Fehler beim Laden:", err);
+    }
 }
 
 
 /* ======================
-   ROBUSTHEIT
+   EINTRÄGE
 ====================== */
 
-// Mikrofon stoppen, wenn Tab/App verlassen wird
-document.addEventListener("visibilitychange", () => {
-    if (document.hidden && recog && isListening) {
-        try { recog.abort(); } catch {}
-        isListening = false;
-        mikrofon.classList.remove("mic-active");
+function eintragAnlegen(text, erledigt = false) {
+    const li = document.createElement("li");
+    li.dataset.text = text;
+    li.textContent = text;
+
+    if (erledigt) li.classList.add("erledigt");
+
+    li.onclick = () => {
+        if (modus === "einkaufen") {
+            li.classList.toggle("erledigt");
+            speichern();
+        }
+    };
+
+    liste.appendChild(li);
+}
+
+
+/* ======================
+   EINZEL-EINGABE
+====================== */
+
+hinzufuegen.onclick = () => {
+    const text = eingabe.value.trim();
+    if (!text) return;
+
+    eintragAnlegen(text);
+    speichern();
+    eingabe.value = "";
+};
+
+eingabe.addEventListener("keydown", e => {
+    if (e.key === "Enter") {
+        e.preventDefault();
+        hinzufuegen.click();
     }
 });
 
-// Sicherheit: nach 10 Sekunden abbrechen
-setInterval(() => {
-    if (isListening && recog) {
-        try { recog.abort(); } catch {}
-        isListening = false;
-        mikrofon.classList.remove("mic-active");
-    }
-}, 10000);
 
+/* ======================
+   MEHRZEILEN-EINGABE
+====================== */
+
+multiAdd.onclick = () => {
+    const text = multiInput.value.trim();
+    if (!text) return;
+
+    const lines = text.split("\n");
+
+    lines.forEach(line => {
+        const item = line.trim();
+        if (item !== "") eintragAnlegen(item);
+    });
+
+    speichern();
+    multiInput.value = "";
+};
+
+// Auto-Resize
+multiInput.addEventListener("input", () => {
+    multiInput.style.height = "auto";
+    multiInput.style.height = multiInput.scrollHeight + "px";
+});
+
+
+/* ======================
+   MODUS-WECHSEL
+====================== */
+
+function setModus(neu) {
+    modus = neu;
+
+    btnErfassen.classList.toggle("active", modus === "erfassen");
+    btnEinkaufen.classList.toggle("active", modus === "einkaufen");
+
+    document.body.classList.toggle("modus-einkaufen", modus === "einkaufen");
+}
+
+btnErfassen.onclick = () => setModus("erfassen");
+btnEinkaufen.onclick = () => setModus("einkaufen");
+
+
+/* ======================
+   EXPORT
+====================== */
+
+btnExport.onclick = () => {
+    const items = [];
+    liste.querySelectorAll("li").forEach(li => {
+        items.push((li.classList.contains("erledigt") ? "✔ " : "") + li.dataset.text);
+    });
+
+    const text = items.join("\n");
+    navigator.clipboard.writeText(text);
+
+    alert("Liste wurde in die Zwischenablage kopiert.");
+};
+
+
+/* ======================
+   START
+====================== */
+
+laden();
+setModus("erfassen");
