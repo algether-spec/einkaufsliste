@@ -60,24 +60,9 @@ main {
     padding: 16px;
 }
 
-/* Eingabezeile */
-.input-row {
-    background: white;
-    padding: 12px;
-    border-radius: 16px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.06);
-    display: flex;
-    gap: 8px;
-    margin-bottom: 16px;
-}
 
-input {
-    flex: 1;
-    padding: 14px;
-    font-size: 16px;
-    border-radius: 12px;
-    border: 1px solid #d1d5db;
-}
+
+
 
 /* Buttons */
 button {
@@ -131,7 +116,7 @@ button:hover {
     transition: height 0.15s ease;
 }
 
-body.modus-einkaufen .input-row,
+
 body.modus-einkaufen .multi-box {
     display: none !important;
 }

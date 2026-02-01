@@ -2,8 +2,6 @@
    DOM ELEMENTE
 ====================== */
 
-const eingabe = document.getElementById("eingabe");
-const hinzufuegen = document.getElementById("hinzufuegen");
 const liste = document.getElementById("liste");
 
 const btnErfassen = document.getElementById("btnErfassen");
@@ -69,27 +67,6 @@ function eintragAnlegen(text, erledigt = false) {
 
 
 /* ======================
-   EINZEL-EINGABE
-====================== */
-
-hinzufuegen.onclick = () => {
-    const text = eingabe.value.trim();
-    if (!text) return;
-
-    eintragAnlegen(text);
-    speichern();
-    eingabe.value = "";
-};
-
-eingabe.addEventListener("keydown", e => {
-    if (e.key === "Enter") {
-        e.preventDefault();
-        hinzufuegen.click();
-    }
-});
-
-
-/* ======================
    MEHRZEILEN-EINGABE
 ====================== */
 
@@ -98,7 +75,6 @@ multiAdd.onclick = () => {
     if (!text) return;
 
     const lines = text.split("\n");
-
     lines.forEach(line => {
         const item = line.trim();
         if (item !== "") eintragAnlegen(item);
@@ -106,6 +82,7 @@ multiAdd.onclick = () => {
 
     speichern();
     multiInput.value = "";
+    multiInput.focus(); // Cursor bleibt im Feld
 };
 
 // Auto-Resize
@@ -155,3 +132,12 @@ btnExport.onclick = () => {
 
 laden();
 setModus("erfassen");
+
+window.addEventListener("load", () => {
+    multiInput.focus();
+});
+
+// Autofokus beim Start
+window.addEventListener("load", () => {
+    multiInput.focus();
+});
