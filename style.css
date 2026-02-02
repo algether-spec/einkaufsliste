@@ -173,9 +173,10 @@ li.erledigt {
 }
 
 /* Einkaufsmodus */
+
 body.modus-einkaufen li {
-    padding: 16px 14px;
-    font-size: 18px;
+    padding: 10px 12px;   /* gleiche Werte wie normal */
+    font-size: 16px;      /* gleiche Werte wie normal */
 }
 
 /* Navigation */
