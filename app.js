@@ -19,10 +19,10 @@ const btnErfassen = document.getElementById("btnErfassen");
 const btnEinkaufen = document.getElementById("btnEinkaufen");
 const btnExport = document.getElementById("btnExport");
 
-const multiInput = document.getElementById("multiInput");
-const multiAdd = document.getElementById("multiAdd");
-const btnNewLine = document.getElementById("btnNewLine");
-const btnMic = document.getElementById("btnMic");
+// NEUE ELEMENTE
+const multiInput = document.getElementById("multi-line-input");
+const multiAdd = document.getElementById("add-all-button");
+const btnNewLine = document.getElementById("newline-button");
 
 let modus = "erfassen";
 
@@ -90,18 +90,18 @@ function eintragAnlegen(text, erledigt = false) {
 
 
 /* ======================
-   MEHRZEILEN-EINGABE
+   MEHRZEILEN-EINGABE (NEU)
 ====================== */
 
 multiAdd.onclick = () => {
     const text = multiInput.value.trim();
     if (!text) return;
 
-    const lines = text.split("\n");
-    lines.forEach(line => {
-        const item = line.trim();
-        if (item !== "") eintragAnlegen(item);
-    });
+    const lines = text.split("\n")
+        .map(l => l.trim())
+        .filter(l => l !== "");
+
+    lines.forEach(item => eintragAnlegen(item));
 
     speichern();
     multiInput.value = "";
@@ -110,7 +110,7 @@ multiAdd.onclick = () => {
 };
 
 btnNewLine.onclick = () => {
-    multiInput.value += (multiInput.value ? "\n" : "");
+    multiInput.value += "\n";
     autoResize();
     multiInput.focus();
 };
@@ -121,31 +121,6 @@ function autoResize() {
     multiInput.style.height = "auto";
     multiInput.style.height = multiInput.scrollHeight + "px";
 }
-
-
-/* ======================
-   MIKROFON
-====================== */
-
-btnMic.onclick = () => {
-    if (!("webkitSpeechRecognition" in window)) {
-        alert("Spracherkennung wird nicht unterstützt.");
-        return;
-    }
-
-    const rec = new webkitSpeechRecognition();
-    rec.lang = "de-DE";
-    rec.interimResults = false;
-
-    rec.onresult = (event) => {
-        const text = event.results[0][0].transcript;
-        multiInput.value += (multiInput.value ? "\n" : "") + text;
-        autoResize();
-        multiInput.focus();
-    };
-
-    rec.start();
-};
 
 
 /* ======================

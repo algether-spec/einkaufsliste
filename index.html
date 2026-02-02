@@ -37,17 +37,19 @@
 
     <main>
 
-        <div class="multi-box">
-            <label class="multi-label">Mehrere Artikel auf einmal</label>
+        <!-- 🔥 NEUER EINGABEBEREICH -->
+        <div class="input-section">
+            <label for="multi-line-input" class="input-label">Mehrere Artikel auf einmal</label>
 
-            <div class="input-row">
-                <textarea id="multiInput" placeholder="Jede Zeile = ein Artikel"></textarea>
-                <button id="btnNewLine" class="add">↵</button>
-                <button id="btnMic" class="mic-btn">🎤</button>
+            <textarea id="multi-line-input"
+                      placeholder="Jede Zeile = ein Artikel"></textarea>
+
+            <div class="input-actions">
+                <button id="newline-button" class="action-button">↵</button>
+                <button id="add-all-button" class="add-button">Alle hinzufügen</button>
             </div>
-
-            <button id="multiAdd" class="add">Alle hinzufügen</button>
         </div>
+        <!-- 🔥 ENDE NEUER EINGABEBEREICH -->
 
         <ul id="liste"></ul>
 

@@ -81,27 +81,30 @@ button:hover {
     color: white;
 }
 
-/* Mehrzeilen-Eingabe */
-.multi-box {
+/* ============================
+   NEUER MEHRZEILEN-EINGABEBEREICH
+============================ */
+
+.input-section {
     background: white;
     padding: 14px;
     border-radius: 16px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.06);
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
     margin-bottom: 16px;
 }
 
-.multi-label {
+.input-label {
     font-size: 14px;
     font-weight: 600;
     color: #374151;
 }
 
-#multiInput {
+#multi-line-input {
     width: 100%;
-    min-height: 90px;
+    min-height: 120px;
     padding: 12px;
     font-size: 16px;
     border-radius: 12px;
@@ -112,28 +115,34 @@ button:hover {
     transition: height 0.15s ease;
 }
 
-body.modus-einkaufen .multi-box {
-    display: none !important;
-}
-
-/* Eingabezeile mit Buttons */
-.input-row {
+.input-actions {
     display: flex;
-    gap: 8px;
-    align-items: stretch;
+    gap: 12px;
 }
 
-.mic-btn {
+.action-button {
+    padding: 10px 14px;
+    font-size: 20px;
+    border: none;
+    background: #e5e7eb;
+    border-radius: 12px;
+    cursor: pointer;
+}
+
+.add-button {
+    flex: 1;
+    padding: 12px;
     background: var(--primary);
     color: white;
     border: none;
-    padding: 12px 14px;
     border-radius: 12px;
-    font-size: 20px;
+    font-size: 16px;
     cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+}
+
+/* Einkaufsmodus: Eingabefeld ausblenden */
+body.modus-einkaufen .input-section {
+    display: none !important;
 }
 
 /* Liste */
@@ -273,8 +282,7 @@ nav button.active {
         background: var(--bg);
     }
 
-    .input-row,
-    .multi-box,
+    .input-section,
     li,
     nav {
         background: var(--card);
