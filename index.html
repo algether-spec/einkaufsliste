@@ -20,6 +20,14 @@
 </head>
 
 <body>
+
+<!-- SPLASH SCREEN -->
+<div id="splash">
+    <div class="splash-cart">🛒</div>
+    <div class="splash-title">Einkaufsliste</div>
+    <div class="splash-sub">powered by Copilot</div>
+</div>
+
 <div class="app">
 
     <header>
@@ -29,17 +37,18 @@
 
     <main>
 
-        <!-- Einzel-Eingabe -->
-       
-
-        <!-- Mehrzeilen-Eingabe -->
         <div class="multi-box">
             <label class="multi-label">Mehrere Artikel auf einmal</label>
-            <textarea id="multiInput" placeholder="Jede Zeile = ein Artikel"></textarea>
+
+            <div class="input-row">
+                <textarea id="multiInput" placeholder="Jede Zeile = ein Artikel"></textarea>
+                <button id="btnNewLine" class="add">↵</button>
+                <button id="btnMic" class="mic-btn">🎤</button>
+            </div>
+
             <button id="multiAdd" class="add">Alle hinzufügen</button>
         </div>
 
-        <!-- Liste -->
         <ul id="liste"></ul>
 
     </main>

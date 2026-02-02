@@ -1,4 +1,15 @@
 /* ======================
+   SPLASH
+====================== */
+
+window.addEventListener("load", () => {
+    const splash = document.getElementById("splash");
+    setTimeout(() => {
+        if (splash) splash.remove();
+    }, 2600);
+});
+
+/* ======================
    DOM ELEMENTE
 ====================== */
 
@@ -10,8 +21,10 @@ const btnExport = document.getElementById("btnExport");
 
 const multiInput = document.getElementById("multiInput");
 const multiAdd = document.getElementById("multiAdd");
+const btnNewLine = document.getElementById("btnNewLine");
+const btnMic = document.getElementById("btnMic");
 
-let modus = "erfassen"; // oder "einkaufen"
+let modus = "erfassen";
 
 
 /* ======================
@@ -59,10 +72,20 @@ function eintragAnlegen(text, erledigt = false) {
         if (modus === "einkaufen") {
             li.classList.toggle("erledigt");
             speichern();
+
+            if (li.classList.contains("erledigt")) {
+                liste.appendChild(li);
+            } else {
+                liste.insertBefore(li, liste.firstChild);
+            }
         }
     };
 
-    liste.appendChild(li);
+    if (erledigt) {
+        liste.appendChild(li);
+    } else {
+        liste.insertBefore(li, liste.firstChild);
+    }
 }
 
 
@@ -82,14 +105,47 @@ multiAdd.onclick = () => {
 
     speichern();
     multiInput.value = "";
-    multiInput.focus(); // Cursor bleibt im Feld
+    autoResize();
+    multiInput.focus();
 };
 
-// Auto-Resize
-multiInput.addEventListener("input", () => {
+btnNewLine.onclick = () => {
+    multiInput.value += (multiInput.value ? "\n" : "");
+    autoResize();
+    multiInput.focus();
+};
+
+multiInput.addEventListener("input", autoResize);
+
+function autoResize() {
     multiInput.style.height = "auto";
     multiInput.style.height = multiInput.scrollHeight + "px";
-});
+}
+
+
+/* ======================
+   MIKROFON
+====================== */
+
+btnMic.onclick = () => {
+    if (!("webkitSpeechRecognition" in window)) {
+        alert("Spracherkennung wird nicht unterstützt.");
+        return;
+    }
+
+    const rec = new webkitSpeechRecognition();
+    rec.lang = "de-DE";
+    rec.interimResults = false;
+
+    rec.onresult = (event) => {
+        const text = event.results[0][0].transcript;
+        multiInput.value += (multiInput.value ? "\n" : "") + text;
+        autoResize();
+        multiInput.focus();
+    };
+
+    rec.start();
+};
 
 
 /* ======================
@@ -97,12 +153,18 @@ multiInput.addEventListener("input", () => {
 ====================== */
 
 function setModus(neu) {
+    const vorher = modus;
     modus = neu;
 
     btnErfassen.classList.toggle("active", modus === "erfassen");
     btnEinkaufen.classList.toggle("active", modus === "einkaufen");
 
     document.body.classList.toggle("modus-einkaufen", modus === "einkaufen");
+
+    if (vorher === "einkaufen" && neu === "erfassen") {
+        liste.querySelectorAll("li.erledigt").forEach(li => li.remove());
+        speichern();
+    }
 }
 
 btnErfassen.onclick = () => setModus("erfassen");
@@ -113,16 +175,31 @@ btnEinkaufen.onclick = () => setModus("einkaufen");
    EXPORT
 ====================== */
 
-btnExport.onclick = () => {
+btnExport.onclick = async () => {
     const items = [];
     liste.querySelectorAll("li").forEach(li => {
-        items.push((li.classList.contains("erledigt") ? "✔ " : "") + li.dataset.text);
+        const prefix = li.classList.contains("erledigt") ? "✔ " : "• ";
+        items.push(prefix + li.dataset.text);
     });
 
     const text = items.join("\n");
-    navigator.clipboard.writeText(text);
 
-    alert("Liste wurde in die Zwischenablage kopiert.");
+    if (navigator.share) {
+        try {
+            await navigator.share({
+                title: "Einkaufsliste",
+                text
+            });
+            return;
+        } catch (e) {}
+    }
+
+    if (navigator.clipboard) {
+        await navigator.clipboard.writeText(text);
+        alert("Liste kopiert – du kannst sie jetzt im Messenger einfügen.");
+    } else {
+        alert(text);
+    }
 };
 
 
@@ -135,9 +212,5 @@ setModus("erfassen");
 
 window.addEventListener("load", () => {
     multiInput.focus();
-});
-
-// Autofokus beim Start
-window.addEventListener("load", () => {
-    multiInput.focus();
+    autoResize();
 });
