@@ -1,20 +1,27 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-    <meta charset="UTF-8" />
-    <title>Einkaufsliste</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta charset="UTF-8">
 
+    <title>Einkaufsliste</title>
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#2563eb">
+
+    <!-- PWA (klassisch, bewährt) -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+
+    <!-- Styles -->
     <link rel="stylesheet" href="style.css">
 
     <!-- Manifest -->
-    <link rel="manifest" href="/einkaufsliste/manifest.json">
-    <meta name="theme-color" content="#2563eb">
+    <link rel="manifest" href="manifest.json">
 
     <!-- Service Worker -->
     <script>
         if ("serviceWorker" in navigator) {
-            navigator.serviceWorker.register("/einkaufsliste/service-worker.js");
+            navigator.serviceWorker.register("service-worker.js");
         }
     </script>
 </head>
@@ -23,7 +30,7 @@
 
 <!-- SPLASH SCREEN -->
 <div id="splash">
-    <div class="splash-cart">🛒</div>
+    <div class="splash-cart" aria-label="Einkaufswagen">🛒</div>
     <div class="splash-title">Einkaufsliste</div>
     <div class="splash-sub">powered by Al.Gether</div>
 </div>
@@ -37,32 +44,35 @@
 
     <main>
 
-        <!-- 🔥 NEUER EINGABEBEREICH -->
+        <!-- MEHRZEILEN-EINGABE -->
         <div class="input-section">
-            <label for="multi-line-input" class="input-label">Mehrere Artikel auf einmal</label>
+            <label for="multi-line-input" class="input-label">
+                Mehrere Artikel auf einmal
+            </label>
 
-            <textarea id="multi-line-input"
-                      placeholder="Jede Zeile = ein Artikel"></textarea>
+            <textarea
+                id="multi-line-input"
+                placeholder="Jede Zeile = ein Artikel"
+                rows="1"></textarea>
 
             <div class="input-actions">
-                <button id="newline-button" class="action-button">↵</button>
-                <button id="add-all-button" class="add-button">Alle hinzufügen</button>
+                <button type="button"
+                        id="newline-button"
+                        class="action-button">↵</button>
+
+                <button type="button"
+                        id="add-all-button"
+                        class="add-button">Alle hinzufügen</button>
             </div>
         </div>
-        <!-- 🔥 ENDE NEUER EINGABEBEREICH -->
 
         <ul id="liste"></ul>
 
     </main>
 
     <nav>
-        <button id="btnErfassen" class="active">Erfassen</button>
-        <button id="btnEinkaufen">Einkaufen</button>
-        <button id="btnExport">Export</button>
-    </nav>
+        <button type="button" id="btnErfassen" class="active">
+            Erfassen
+        </button>
 
-</div>
-
-<script src="app.js"></script>
-</body>
-</html>
+        <button type="

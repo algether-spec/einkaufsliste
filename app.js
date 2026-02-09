@@ -1,5 +1,5 @@
 /* ======================
-   SPLASH
+   SPLASH + START
 ====================== */
 
 window.addEventListener("load", () => {
@@ -7,7 +7,13 @@ window.addEventListener("load", () => {
     setTimeout(() => {
         if (splash) splash.remove();
     }, 2600);
+
+    setTimeout(() => {
+        multiInput.focus();
+        autoResize();
+    }, 200);
 });
+
 
 /* ======================
    DOM ELEMENTE
@@ -15,13 +21,12 @@ window.addEventListener("load", () => {
 
 const liste = document.getElementById("liste");
 
-const btnErfassen = document.getElementById("btnErfassen");
+const btnErfassen  = document.getElementById("btnErfassen");
 const btnEinkaufen = document.getElementById("btnEinkaufen");
-const btnExport = document.getElementById("btnExport");
+const btnExport    = document.getElementById("btnExport");
 
-// NEUE ELEMENTE
 const multiInput = document.getElementById("multi-line-input");
-const multiAdd = document.getElementById("add-all-button");
+const multiAdd   = document.getElementById("add-all-button");
 const btnNewLine = document.getElementById("newline-button");
 
 let modus = "erfassen";
@@ -49,8 +54,9 @@ function laden() {
     if (!raw) return;
 
     try {
-        const daten = JSON.parse(raw);
-        daten.forEach(e => eintragAnlegen(e.text, e.erledigt));
+        JSON.parse(raw).forEach(e =>
+            eintragAnlegen(e.text, e.erledigt)
+        );
     } catch (err) {
         console.warn("Fehler beim Laden:", err);
     }
@@ -69,39 +75,36 @@ function eintragAnlegen(text, erledigt = false) {
     if (erledigt) li.classList.add("erledigt");
 
     li.onclick = () => {
-        if (modus === "einkaufen") {
-            li.classList.toggle("erledigt");
-            speichern();
+        if (modus !== "einkaufen") return;
 
-            if (li.classList.contains("erledigt")) {
-                liste.appendChild(li);
-            } else {
-                liste.insertBefore(li, liste.firstChild);
-            }
+        li.classList.toggle("erledigt");
+        speichern();
+
+        if (li.classList.contains("erledigt")) {
+            liste.appendChild(li);
+        } else {
+            liste.insertBefore(li, liste.firstChild);
         }
     };
 
-    if (erledigt) {
-        liste.appendChild(li);
-    } else {
-        liste.insertBefore(li, liste.firstChild);
-    }
+    erledigt
+        ? liste.appendChild(li)
+        : liste.insertBefore(li, liste.firstChild);
 }
 
 
 /* ======================
-   MEHRZEILEN-EINGABE (NEU)
+   MEHRZEILEN-EINGABE
 ====================== */
 
 multiAdd.onclick = () => {
     const text = multiInput.value.trim();
     if (!text) return;
 
-    const lines = text.split("\n")
+    text.split("\n")
         .map(l => l.trim())
-        .filter(l => l !== "");
-
-    lines.forEach(item => eintragAnlegen(item));
+        .filter(Boolean)
+        .forEach(item => eintragAnlegen(item));
 
     speichern();
     multiInput.value = "";
@@ -124,7 +127,7 @@ function autoResize() {
 
 
 /* ======================
-   MODUS-WECHSEL
+   MODUS
 ====================== */
 
 function setModus(neu) {
@@ -133,7 +136,6 @@ function setModus(neu) {
 
     btnErfassen.classList.toggle("active", modus === "erfassen");
     btnEinkaufen.classList.toggle("active", modus === "einkaufen");
-
     document.body.classList.toggle("modus-einkaufen", modus === "einkaufen");
 
     if (vorher === "einkaufen" && neu === "erfassen") {
@@ -142,7 +144,7 @@ function setModus(neu) {
     }
 }
 
-btnErfassen.onclick = () => setModus("erfassen");
+btnErfassen.onclick  = () => setModus("erfassen");
 btnEinkaufen.onclick = () => setModus("einkaufen");
 
 
@@ -151,27 +153,22 @@ btnEinkaufen.onclick = () => setModus("einkaufen");
 ====================== */
 
 btnExport.onclick = async () => {
-    const items = [];
-    liste.querySelectorAll("li").forEach(li => {
-        const prefix = li.classList.contains("erledigt") ? "✔ " : "• ";
-        items.push(prefix + li.dataset.text);
-    });
-
-    const text = items.join("\n");
+    const text = [...liste.querySelectorAll("li")]
+        .map(li =>
+            (li.classList.contains("erledigt") ? "✔ " : "• ") + li.dataset.text
+        )
+        .join("\n");
 
     if (navigator.share) {
         try {
-            await navigator.share({
-                title: "Einkaufsliste",
-                text
-            });
+            await navigator.share({ title: "Einkaufsliste", text });
             return;
-        } catch (e) {}
+        } catch {}
     }
 
-    if (navigator.clipboard) {
+    if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(text);
-        alert("Liste kopiert – du kannst sie jetzt im Messenger einfügen.");
+        alert("Liste kopiert.");
     } else {
         alert(text);
     }
@@ -179,13 +176,8 @@ btnExport.onclick = async () => {
 
 
 /* ======================
-   START
+   INIT
 ====================== */
 
 laden();
 setModus("erfassen");
-
-window.addEventListener("load", () => {
-    multiInput.focus();
-    autoResize();
-});
