@@ -1,34 +1,14 @@
-# Einkaufsliste
+# Einkaufsliste (PWA)
 
-Kleine Web-App zum Verwalten einer Einkaufsliste.
-
-## Technik
-
-- HTML
-- JavaScript
-- Kein Framework
+Einfache Offline-fähige Einkaufsliste als Progressive Web App.
 
 ## Funktionen
 
-- Artikel erfassen
-- Einkaufsliste anzeigen
-- Artikel als erledigt markieren
+- Mehrzeilen-Eingabe
+- Offline nutzbar
+- Installierbar als App
+- Export (Teilen / Zwischenablage)
 
-## Zweck
+## Live
 
-Lern- und Hobbyprojekt.
-Kleine Web-App zum Verwalten einer Einkaufsliste.
-
-Technik
-
-HTML
-JavaScript
-Kein Framework
-Funktionen
-
-Artikel erfassen
-Einkaufsliste anzeigen
-Artikel als erledigt markieren
-Zweck
-
-Lern- und Hobbyprojekt.
+https://DEINNAME.github.io/einkaufsliste/
