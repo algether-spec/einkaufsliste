@@ -1,26 +1,20 @@
 {
   "name": "Einkaufsliste",
-  "short_name": "Einkaufsliste",
-  "start_url": "/einkaufsliste/",
+  "short_name": "Liste",
+  "description": "Einfache Einkaufsliste für den Alltag",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#2563eb",
   "theme_color": "#2563eb",
   "icons": [
     {
-      "src": "/einkaufsliste/icon-192.png",
+      "src": "icon-192.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "/einkaufsliste/icon-512.png",
+      "src": "icon-512.png",
       "sizes": "512x512",
       "type": "image/png"
     },
-    {
-      "src": "/einkaufsliste/icon-maskable.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable"
-    }
-  ]
-}
