@@ -36,12 +36,10 @@ const SpeechRecognitionCtor =
 
 let recognition;
 let isListening = false;
-let dictationBaseText = "";
 let finalTranscript = "";
+let latestTranscript = "";
 let micSessionTimer;
 const MIC_SESSION_MS = 30000;
-let pendingManualNewline = false;
-let forceNewlineOnDictationStart = false;
 
 
 /* ======================
@@ -136,7 +134,6 @@ btnNewLine.onclick = () => {
     multiInput.value += "\n";
     autoResize();
     fokusInputAmEnde();
-    pendingManualNewline = true;
 };
 
 multiInput.addEventListener("input", autoResize);
@@ -152,7 +149,6 @@ multiInput.addEventListener("keydown", event => {
     multiInput.setSelectionRange(nextPos, nextPos);
     autoResize();
     multiInput.focus();
-    pendingManualNewline = true;
 });
 
 function autoResize() {
@@ -182,23 +178,6 @@ function setInputWithDictation(text) {
     fokusInputAmEnde();
 }
 
-function buildDictationText(base, transcript, forceNewline = false) {
-    const spoken = transcript.trim();
-    if (!spoken) return base;
-
-    if (!base) return spoken;
-
-    if (forceNewline) {
-        if (base.endsWith("\n")) return base + spoken;
-        return base + "\n" + spoken;
-    }
-
-    const endsWithNewline = base.endsWith("\n");
-    if (endsWithNewline) return base + spoken;
-
-    return base + "\n" + spoken;
-}
-
 function initRecognition() {
     if (!SpeechRecognitionCtor) return null;
 
@@ -210,6 +189,8 @@ function initRecognition() {
 
     r.onstart = () => {
         isListening = true;
+        finalTranscript = "";
+        latestTranscript = "";
         setMicButtonState(true);
         setMicStatus("Spracheingabe aktiv (max. 30s)...");
         clearTimeout(micSessionTimer);
@@ -230,10 +211,9 @@ function initRecognition() {
             else interimTranscript += (interimTranscript ? " " : "") + part;
         }
 
-        const combined = [finalTranscript, interimTranscript].filter(Boolean).join(" ");
-        setInputWithDictation(
-            buildDictationText(dictationBaseText, combined, forceNewlineOnDictationStart)
-        );
+        const combined = [finalTranscript, interimTranscript].filter(Boolean).join(" ").trim();
+        latestTranscript = combined;
+        setInputWithDictation(combined);
     };
 
     r.onerror = event => {
@@ -253,10 +233,18 @@ function initRecognition() {
         clearTimeout(micSessionTimer);
         isListening = false;
         setMicButtonState(false);
-        forceNewlineOnDictationStart = false;
+        const spokenText = finalTranscript.trim() || latestTranscript.trim();
 
-        if (finalTranscript.trim()) setMicStatus("Text uebernommen.");
-        else if (!micStatus?.textContent) setMicStatus("Keine Sprache erkannt.");
+        if (spokenText) {
+            eintragAnlegen(spokenText);
+            speichern();
+            multiInput.value = "";
+            autoResize();
+            setMicStatus("Eintrag per Sprache gespeichert.");
+            return;
+        }
+
+        if (!micStatus?.textContent) setMicStatus("Keine Sprache erkannt.");
     };
 
     return r;
@@ -282,10 +270,6 @@ function toggleDictation() {
         return;
     }
 
-    dictationBaseText = multiInput.value;
-    finalTranscript = "";
-    forceNewlineOnDictationStart = pendingManualNewline;
-    pendingManualNewline = false;
     setMicStatus("Mikrofon wird gestartet...");
 
     try {
