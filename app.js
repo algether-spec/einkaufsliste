@@ -41,6 +41,7 @@ let latestTranscript = "";
 let hasManualCommitInMicSession = false;
 let micSessionTimer;
 const MIC_SESSION_MS = 30000;
+let pauseTranscriptToInput = false;
 
 
 /* ======================
@@ -109,7 +110,6 @@ function eintragAnlegen(text, erledigt = false) {
 ====================== */
 
 function fokusInputAmEnde() {
-    multiInput.focus();
     const pos = multiInput.value.length;
     multiInput.setSelectionRange(pos, pos);
 }
@@ -126,13 +126,14 @@ function mehrzeilenSpeichern() {
     speichern();
     multiInput.value = "";
     autoResize();
-    fokusInputAmEnde();
+    multiInput.blur();
 
     if (isListening) {
         // Keep mic running, but reset buffers to avoid duplicate auto-save on end.
         finalTranscript = "";
         latestTranscript = "";
         hasManualCommitInMicSession = true;
+        pauseTranscriptToInput = true;
         setMicStatus("Eintrag gespeichert, Spracheingabe laeuft weiter...");
     }
 }
@@ -142,7 +143,7 @@ multiAdd.onclick = mehrzeilenSpeichern;
 btnNewLine.onclick = () => {
     multiInput.value += "\n";
     autoResize();
-    fokusInputAmEnde();
+    multiInput.blur();
 };
 
 multiInput.addEventListener("input", autoResize);
@@ -157,7 +158,6 @@ multiInput.addEventListener("keydown", event => {
     const nextPos = start + 1;
     multiInput.setSelectionRange(nextPos, nextPos);
     autoResize();
-    multiInput.focus();
 });
 
 function autoResize() {
@@ -184,7 +184,9 @@ function setMicButtonState(listening) {
 function setInputWithDictation(text) {
     multiInput.value = text;
     autoResize();
-    fokusInputAmEnde();
+    if (document.activeElement === multiInput) {
+        fokusInputAmEnde();
+    }
 }
 
 function initRecognition() {
@@ -201,6 +203,7 @@ function initRecognition() {
         finalTranscript = "";
         latestTranscript = "";
         hasManualCommitInMicSession = false;
+        pauseTranscriptToInput = false;
         setMicButtonState(true);
         setMicStatus("Spracheingabe aktiv (max. 30s)...");
         clearTimeout(micSessionTimer);
@@ -225,7 +228,9 @@ function initRecognition() {
 
         const combined = [finalTranscript, interimTranscript].filter(Boolean).join(" ").trim();
         latestTranscript = combined;
-        setInputWithDictation(combined);
+        if (!pauseTranscriptToInput) {
+            setInputWithDictation(combined);
+        }
     };
 
     r.onerror = event => {
@@ -258,6 +263,7 @@ function initRecognition() {
             speichern();
             multiInput.value = "";
             autoResize();
+            multiInput.blur();
             setMicStatus("Eintrag per Sprache gespeichert.");
             return;
         }
@@ -299,6 +305,11 @@ function toggleDictation() {
 }
 
 if (btnMic) btnMic.onclick = toggleDictation;
+if (multiInput) {
+    multiInput.addEventListener("focus", () => {
+        pauseTranscriptToInput = false;
+    });
+}
 
 
 /* ======================
