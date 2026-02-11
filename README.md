@@ -12,3 +12,13 @@ Einfache Offline-fähige Einkaufsliste als Progressive Web App.
 ## Live
 
 https://DEINNAME.github.io/einkaufsliste/
+
+## Checks
+
+```bash
+npm run check
+```
+
+Enthaelt:
+- JS-Syntaxcheck fuer `app.js` und `service-worker.js`
+- Smoke-Test mit lokalem HTTP-Server (HTML/Manifest/Service-Worker)

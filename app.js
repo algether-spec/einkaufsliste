@@ -29,9 +29,18 @@ const versionBadge = document.getElementById("version-badge");
 const multiInput = document.getElementById("multi-line-input");
 const multiAdd   = document.getElementById("add-all-button");
 const btnNewLine = document.getElementById("newline-button");
+const btnMic     = document.getElementById("mic-button");
+const micStatus  = document.getElementById("mic-status");
 
 let modus = "erfassen";
 const APP_VERSION = "1.0.9";
+const SpeechRecognitionCtor =
+    window.SpeechRecognition || window.webkitSpeechRecognition;
+
+let recognition;
+let isListening = false;
+let dictationBaseText = "";
+let finalTranscript = "";
 
 
 /* ======================
@@ -148,6 +157,122 @@ function autoResize() {
     multiInput.style.height = multiInput.scrollHeight + "px";
 }
 
+function isLocalhost() {
+    return location.hostname === "localhost" || location.hostname === "127.0.0.1";
+}
+
+function setMicStatus(message = "") {
+    if (!micStatus) return;
+    micStatus.textContent = message;
+}
+
+function setMicButtonState(listening) {
+    if (!btnMic) return;
+    btnMic.classList.toggle("listening", listening);
+    btnMic.setAttribute("aria-pressed", listening ? "true" : "false");
+    btnMic.textContent = listening ? "⏹" : "🎤";
+}
+
+function setInputWithDictation(text) {
+    multiInput.value = text;
+    autoResize();
+    fokusInputAmEnde();
+}
+
+function buildDictationText(base, transcript) {
+    const cleanBase = base.trim();
+    const cleanTranscript = transcript.trim();
+
+    if (!cleanTranscript) return base;
+    if (!cleanBase) return cleanTranscript;
+    return cleanBase + "\n" + cleanTranscript;
+}
+
+function initRecognition() {
+    if (!SpeechRecognitionCtor) return null;
+
+    const r = new SpeechRecognitionCtor();
+    r.lang = "de-DE";
+    r.continuous = false;
+    r.interimResults = true;
+    r.maxAlternatives = 1;
+
+    r.onstart = () => {
+        isListening = true;
+        setMicButtonState(true);
+        setMicStatus("Spracheingabe aktiv...");
+    };
+
+    r.onresult = event => {
+        let interimTranscript = "";
+
+        for (let i = event.resultIndex; i < event.results.length; i += 1) {
+            const part = event.results[i][0]?.transcript?.trim() || "";
+            if (!part) continue;
+            if (event.results[i].isFinal) finalTranscript += (finalTranscript ? " " : "") + part;
+            else interimTranscript += (interimTranscript ? " " : "") + part;
+        }
+
+        const combined = [finalTranscript, interimTranscript].filter(Boolean).join(" ");
+        setInputWithDictation(buildDictationText(dictationBaseText, combined));
+    };
+
+    r.onerror = event => {
+        const errorText = {
+            "not-allowed": "Mikrofon wurde nicht erlaubt.",
+            "service-not-allowed": "Spracherkennung ist in Safari blockiert.",
+            "audio-capture": "Kein Mikrofon verfuegbar.",
+            "network": "Netzwerkfehler bei Spracherkennung.",
+            "no-speech": "Keine Sprache erkannt."
+        }[event.error] || ("Spracherkennung-Fehler: " + event.error);
+
+        setMicStatus(errorText);
+    };
+
+    r.onend = () => {
+        isListening = false;
+        setMicButtonState(false);
+
+        if (finalTranscript.trim()) setMicStatus("Text uebernommen.");
+        else if (!micStatus?.textContent) setMicStatus("Keine Sprache erkannt.");
+    };
+
+    return r;
+}
+
+function toggleDictation() {
+    if (!SpeechRecognitionCtor) {
+        setMicStatus("Safari unterstuetzt hier keine Spracherkennung.");
+        return;
+    }
+
+    if (!window.isSecureContext && !isLocalhost()) {
+        setMicStatus("Spracheingabe braucht HTTPS.");
+        return;
+    }
+
+    if (!recognition) recognition = initRecognition();
+    if (!recognition) return;
+
+    if (isListening) {
+        recognition.stop();
+        return;
+    }
+
+    dictationBaseText = multiInput.value;
+    finalTranscript = "";
+    setMicStatus("Mikrofon wird gestartet...");
+
+    try {
+        recognition.start();
+    } catch (error) {
+        setMicStatus("Start fehlgeschlagen. Bitte erneut tippen.");
+        console.warn("Speech start error:", error);
+    }
+}
+
+if (btnMic) btnMic.onclick = toggleDictation;
+
 
 /* ======================
    MODUS
@@ -205,3 +330,9 @@ btnExport.onclick = async () => {
 laden();
 setModus("erfassen");
 if (versionBadge) versionBadge.textContent = "v" + APP_VERSION;
+
+if (btnMic && !SpeechRecognitionCtor) {
+    btnMic.disabled = true;
+    btnMic.title = "Spracherkennung wird hier nicht unterstuetzt";
+    setMicStatus("Spracherkennung wird in diesem Browser nicht unterstuetzt.");
+}

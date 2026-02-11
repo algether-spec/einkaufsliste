@@ -76,6 +76,13 @@ button:hover {
     box-shadow: 0 4px 10px rgba(0,0,0,0.15);
 }
 
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
 .add {
     background: var(--primary);
     color: white;
@@ -140,7 +147,20 @@ button:hover {
     letter-spacing: 0.01em;
 }
 
+.mic-button {
+    background: #dbeafe;
+    color: #1e40af;
+    font-size: 18px;
+}
+
+.mic-button.listening {
+    background: #fee2e2;
+    color: #b91c1c;
+    animation: micPulse 1.2s ease-in-out infinite;
+}
+
 .action-button,
+.mic-button,
 .add-button,
 .export-button {
     flex: 1;
@@ -152,6 +172,12 @@ button:hover {
     align-items: center;
     justify-content: center;
     cursor: pointer;
+}
+
+.mic-status {
+    min-height: 18px;
+    font-size: 12px;
+    color: #6b7280;
 }
 
 .version-badge {
@@ -288,6 +314,12 @@ nav button.active {
     100% { opacity: 0; visibility: hidden; }
 }
 
+@keyframes micPulse {
+    0% { box-shadow: 0 0 0 0 rgba(185, 28, 28, 0.35); }
+    70% { box-shadow: 0 0 0 10px rgba(185, 28, 28, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(185, 28, 28, 0); }
+}
+
 /* Dark Mode */
 @media (prefers-color-scheme: dark) {
     :root {
@@ -310,6 +342,20 @@ nav button.active {
     .export-button {
         background: linear-gradient(135deg, #0f172a, #1f2937);
         color: #e5e7eb;
+    }
+
+    .mic-button {
+        background: #1e3a8a;
+        color: #dbeafe;
+    }
+
+    .mic-button.listening {
+        background: #7f1d1d;
+        color: #fee2e2;
+    }
+
+    .mic-status {
+        color: #9ca3af;
     }
 
     .version-badge {
