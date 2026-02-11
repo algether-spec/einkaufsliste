@@ -30,7 +30,7 @@ const btnMic     = document.getElementById("mic-button");
 const micStatus  = document.getElementById("mic-status");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.10";
+const APP_VERSION = "1.0.11";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -40,6 +40,8 @@ let dictationBaseText = "";
 let finalTranscript = "";
 let micSessionTimer;
 const MIC_SESSION_MS = 30000;
+let pendingManualNewline = false;
+let forceNewlineOnDictationStart = false;
 
 
 /* ======================
@@ -134,6 +136,7 @@ btnNewLine.onclick = () => {
     multiInput.value += "\n";
     autoResize();
     fokusInputAmEnde();
+    pendingManualNewline = true;
 };
 
 multiInput.addEventListener("input", autoResize);
@@ -149,6 +152,7 @@ multiInput.addEventListener("keydown", event => {
     multiInput.setSelectionRange(nextPos, nextPos);
     autoResize();
     multiInput.focus();
+    pendingManualNewline = true;
 });
 
 function autoResize() {
@@ -178,11 +182,16 @@ function setInputWithDictation(text) {
     fokusInputAmEnde();
 }
 
-function buildDictationText(base, transcript) {
+function buildDictationText(base, transcript, forceNewline = false) {
     const spoken = transcript.trim();
     if (!spoken) return base;
 
     if (!base) return spoken;
+
+    if (forceNewline) {
+        if (base.endsWith("\n")) return base + spoken;
+        return base + "\n" + spoken;
+    }
 
     const endsWithNewline = base.endsWith("\n");
     if (endsWithNewline) return base + spoken;
@@ -222,7 +231,9 @@ function initRecognition() {
         }
 
         const combined = [finalTranscript, interimTranscript].filter(Boolean).join(" ");
-        setInputWithDictation(buildDictationText(dictationBaseText, combined));
+        setInputWithDictation(
+            buildDictationText(dictationBaseText, combined, forceNewlineOnDictationStart)
+        );
     };
 
     r.onerror = event => {
@@ -242,6 +253,7 @@ function initRecognition() {
         clearTimeout(micSessionTimer);
         isListening = false;
         setMicButtonState(false);
+        forceNewlineOnDictationStart = false;
 
         if (finalTranscript.trim()) setMicStatus("Text uebernommen.");
         else if (!micStatus?.textContent) setMicStatus("Keine Sprache erkannt.");
@@ -272,6 +284,8 @@ function toggleDictation() {
 
     dictationBaseText = multiInput.value;
     finalTranscript = "";
+    forceNewlineOnDictationStart = pendingManualNewline;
+    pendingManualNewline = false;
     setMicStatus("Mikrofon wird gestartet...");
 
     try {
