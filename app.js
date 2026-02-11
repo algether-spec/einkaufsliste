@@ -21,6 +21,7 @@ const liste = document.getElementById("liste");
 const btnErfassen  = document.getElementById("btnErfassen");
 const btnEinkaufen = document.getElementById("btnEinkaufen");
 const btnExport    = document.getElementById("btnExport");
+const modeBadge    = document.getElementById("mode-badge");
 const versionBadge = document.getElementById("version-badge");
 
 const multiInput = document.getElementById("multi-line-input");
@@ -334,6 +335,7 @@ function setModus(neu) {
 
     btnErfassen.classList.toggle("active", modus === "erfassen");
     btnEinkaufen.classList.toggle("active", modus === "einkaufen");
+    if (modeBadge) modeBadge.textContent = modus === "einkaufen" ? "Einkaufen" : "Erfassen";
     document.body.classList.toggle("modus-einkaufen", modus === "einkaufen");
 
     if (vorher === "einkaufen" && neu === "erfassen") {

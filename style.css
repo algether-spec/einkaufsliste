@@ -252,8 +252,9 @@ nav {
 
 nav button {
     flex: 1;
-    padding: 10px 0;
-    font-size: 15px;
+    min-height: 58px;
+    padding: 12px 0;
+    font-size: 18px;
     font-weight: 600;
     background: none;
     border: none;
