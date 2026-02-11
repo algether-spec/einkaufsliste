@@ -8,10 +8,7 @@ window.addEventListener("load", () => {
         if (splash) splash.remove();
     }, 2600);
 
-    setTimeout(() => {
-        multiInput.focus();
-        autoResize();
-    }, 200);
+    setTimeout(autoResize, 200);
 });
 
 
@@ -41,6 +38,8 @@ let recognition;
 let isListening = false;
 let dictationBaseText = "";
 let finalTranscript = "";
+let micSessionTimer;
+const MIC_SESSION_MS = 30000;
 
 
 /* ======================
@@ -109,7 +108,6 @@ function eintragAnlegen(text, erledigt = false) {
 ====================== */
 
 function fokusInputAmEnde() {
-    multiInput.focus();
     const pos = multiInput.value.length;
     multiInput.setSelectionRange(pos, pos);
 }
@@ -176,7 +174,8 @@ function setMicButtonState(listening) {
 function setInputWithDictation(text) {
     multiInput.value = text;
     autoResize();
-    fokusInputAmEnde();
+    const pos = multiInput.value.length;
+    multiInput.setSelectionRange(pos, pos);
 }
 
 function buildDictationText(base, transcript) {
@@ -193,14 +192,20 @@ function initRecognition() {
 
     const r = new SpeechRecognitionCtor();
     r.lang = "de-DE";
-    r.continuous = false;
+    r.continuous = true;
     r.interimResults = true;
     r.maxAlternatives = 1;
 
     r.onstart = () => {
         isListening = true;
         setMicButtonState(true);
-        setMicStatus("Spracheingabe aktiv...");
+        setMicStatus("Spracheingabe aktiv (max. 30s)...");
+        clearTimeout(micSessionTimer);
+        micSessionTimer = setTimeout(() => {
+            if (!isListening) return;
+            setMicStatus("Zeitlimit erreicht.");
+            r.stop();
+        }, MIC_SESSION_MS);
     };
 
     r.onresult = event => {
@@ -218,6 +223,7 @@ function initRecognition() {
     };
 
     r.onerror = event => {
+        clearTimeout(micSessionTimer);
         const errorText = {
             "not-allowed": "Mikrofon wurde nicht erlaubt.",
             "service-not-allowed": "Spracherkennung ist in Safari blockiert.",
@@ -230,6 +236,7 @@ function initRecognition() {
     };
 
     r.onend = () => {
+        clearTimeout(micSessionTimer);
         isListening = false;
         setMicButtonState(false);
 
@@ -255,6 +262,7 @@ function toggleDictation() {
     if (!recognition) return;
 
     if (isListening) {
+        clearTimeout(micSessionTimer);
         recognition.stop();
         return;
     }
