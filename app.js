@@ -42,6 +42,7 @@ let micSessionTimer;
 const MIC_SESSION_MS = 30000;
 let skipAutoSaveForCurrentBuffer = false;
 let ignoreResultsUntil = 0;
+let restartMicAfterManualCommit = false;
 
 
 /* ======================
@@ -129,12 +130,15 @@ function mehrzeilenSpeichern() {
     multiInput.blur();
 
     if (isListening) {
-        // Keep mic running and clear current speech buffer.
+        // Restart recognition to flush Safari's internal phrase buffer.
         finalTranscript = "";
         latestTranscript = "";
         skipAutoSaveForCurrentBuffer = true;
         ignoreResultsUntil = Date.now() + 500;
-        setMicStatus("Eintrag gespeichert, Spracheingabe laeuft weiter...");
+        restartMicAfterManualCommit = true;
+        clearTimeout(micSessionTimer);
+        recognition.stop();
+        setMicStatus("Eintrag gespeichert, Mikro wird neu gestartet...");
     }
 }
 
@@ -204,6 +208,7 @@ function initRecognition() {
         latestTranscript = "";
         skipAutoSaveForCurrentBuffer = false;
         ignoreResultsUntil = 0;
+        restartMicAfterManualCommit = false;
         setMicButtonState(true);
         setMicStatus("Spracheingabe aktiv (max. 30s)...");
         clearTimeout(micSessionTimer);
@@ -250,6 +255,12 @@ function initRecognition() {
         clearTimeout(micSessionTimer);
         isListening = false;
         setMicButtonState(false);
+        if (restartMicAfterManualCommit) {
+            restartMicAfterManualCommit = false;
+            startRecognition();
+            return;
+        }
+
         if (skipAutoSaveForCurrentBuffer) {
             skipAutoSaveForCurrentBuffer = false;
             setMicStatus("Spracheingabe beendet.");
@@ -274,6 +285,18 @@ function initRecognition() {
     return r;
 }
 
+function startRecognition() {
+    if (!recognition) return;
+    setMicStatus("Mikrofon wird gestartet...");
+
+    try {
+        recognition.start();
+    } catch (error) {
+        setMicStatus("Start fehlgeschlagen. Bitte erneut tippen.");
+        console.warn("Speech start error:", error);
+    }
+}
+
 function toggleDictation() {
     if (!SpeechRecognitionCtor) {
         setMicStatus("Safari unterstuetzt hier keine Spracherkennung.");
@@ -290,18 +313,12 @@ function toggleDictation() {
 
     if (isListening) {
         clearTimeout(micSessionTimer);
+        restartMicAfterManualCommit = false;
         recognition.stop();
         return;
     }
 
-    setMicStatus("Mikrofon wird gestartet...");
-
-    try {
-        recognition.start();
-    } catch (error) {
-        setMicStatus("Start fehlgeschlagen. Bitte erneut tippen.");
-        console.warn("Speech start error:", error);
-    }
+    startRecognition();
 }
 
 if (btnMic) btnMic.onclick = toggleDictation;
