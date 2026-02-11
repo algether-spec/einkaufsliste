@@ -126,6 +126,13 @@ function mehrzeilenSpeichern() {
     multiInput.value = "";
     autoResize();
     fokusInputAmEnde();
+
+    if (isListening) {
+        // Keep mic running, but reset buffers to avoid duplicate auto-save on end.
+        finalTranscript = "";
+        latestTranscript = "";
+        setMicStatus("Eintrag gespeichert, Spracheingabe laeuft weiter...");
+    }
 }
 
 multiAdd.onclick = mehrzeilenSpeichern;
@@ -202,6 +209,8 @@ function initRecognition() {
     };
 
     r.onresult = event => {
+        if (!isListening) return;
+
         let interimTranscript = "";
 
         for (let i = event.resultIndex; i < event.results.length; i += 1) {
