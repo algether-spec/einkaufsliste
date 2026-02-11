@@ -38,6 +38,7 @@ let recognition;
 let isListening = false;
 let finalTranscript = "";
 let latestTranscript = "";
+let hasManualCommitInMicSession = false;
 let micSessionTimer;
 const MIC_SESSION_MS = 30000;
 
@@ -131,6 +132,7 @@ function mehrzeilenSpeichern() {
         // Keep mic running, but reset buffers to avoid duplicate auto-save on end.
         finalTranscript = "";
         latestTranscript = "";
+        hasManualCommitInMicSession = true;
         setMicStatus("Eintrag gespeichert, Spracheingabe laeuft weiter...");
     }
 }
@@ -198,6 +200,7 @@ function initRecognition() {
         isListening = true;
         finalTranscript = "";
         latestTranscript = "";
+        hasManualCommitInMicSession = false;
         setMicButtonState(true);
         setMicStatus("Spracheingabe aktiv (max. 30s)...");
         clearTimeout(micSessionTimer);
@@ -242,6 +245,12 @@ function initRecognition() {
         clearTimeout(micSessionTimer);
         isListening = false;
         setMicButtonState(false);
+        if (hasManualCommitInMicSession) {
+            hasManualCommitInMicSession = false;
+            setMicStatus("Spracheingabe beendet.");
+            return;
+        }
+
         const spokenText = finalTranscript.trim() || latestTranscript.trim();
 
         if (spokenText) {
