@@ -179,12 +179,15 @@ function setInputWithDictation(text) {
 }
 
 function buildDictationText(base, transcript) {
-    const cleanBase = base.trim();
-    const cleanTranscript = transcript.trim();
+    const spoken = transcript.trim();
+    if (!spoken) return base;
 
-    if (!cleanTranscript) return base;
-    if (!cleanBase) return cleanTranscript;
-    return cleanBase + "\n" + cleanTranscript;
+    if (!base) return spoken;
+
+    const endsWithNewline = base.endsWith("\n");
+    if (endsWithNewline) return base + spoken;
+
+    return base + "\n" + spoken;
 }
 
 function initRecognition() {
