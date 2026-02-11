@@ -108,6 +108,7 @@ function eintragAnlegen(text, erledigt = false) {
 ====================== */
 
 function fokusInputAmEnde() {
+    multiInput.focus();
     const pos = multiInput.value.length;
     multiInput.setSelectionRange(pos, pos);
 }
@@ -174,8 +175,7 @@ function setMicButtonState(listening) {
 function setInputWithDictation(text) {
     multiInput.value = text;
     autoResize();
-    const pos = multiInput.value.length;
-    multiInput.setSelectionRange(pos, pos);
+    fokusInputAmEnde();
 }
 
 function buildDictationText(base, transcript) {
