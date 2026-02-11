@@ -118,6 +118,7 @@ button:hover {
 .input-actions {
     display: flex;
     gap: 12px;
+    align-items: stretch;
 }
 
 .action-button {
@@ -138,6 +139,27 @@ button:hover {
     border-radius: 12px;
     font-size: 16px;
     cursor: pointer;
+}
+
+.export-button {
+    padding: 12px 14px;
+    min-width: 106px;
+    background: linear-gradient(135deg, #0f172a, #334155);
+    color: #f8fafc;
+    border: none;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+}
+
+.version-badge {
+    margin: 0 16px 8px;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: #6b7280;
 }
 
 /* Einkaufsmodus: Eingabefeld ausblenden */
@@ -178,7 +200,7 @@ li.erledigt {
 /* Navigation */
 nav {
     display: flex;
-    justify-content: space-around;
+    justify-content: space-between;
     background: white;
     border-top: 1px solid #e5e7eb;
     border-radius: 0 0 20px 20px;
@@ -283,6 +305,15 @@ nav button.active {
     li,
     nav {
         background: var(--card);
+    }
+
+    .export-button {
+        background: linear-gradient(135deg, #0f172a, #1f2937);
+        color: #e5e7eb;
+    }
+
+    .version-badge {
+        color: #9ca3af;
     }
 
     header {

@@ -24,12 +24,14 @@ const liste = document.getElementById("liste");
 const btnErfassen  = document.getElementById("btnErfassen");
 const btnEinkaufen = document.getElementById("btnEinkaufen");
 const btnExport    = document.getElementById("btnExport");
+const versionBadge = document.getElementById("version-badge");
 
 const multiInput = document.getElementById("multi-line-input");
 const multiAdd   = document.getElementById("add-all-button");
 const btnNewLine = document.getElementById("newline-button");
 
 let modus = "erfassen";
+const APP_VERSION = "1.0.9";
 
 
 /* ======================
@@ -202,3 +204,4 @@ btnExport.onclick = async () => {
 
 laden();
 setModus("erfassen");
+if (versionBadge) versionBadge.textContent = "v" + APP_VERSION;
