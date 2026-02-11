@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v1.0.8";
+const CACHE_VERSION = "v1.0.9";
 const CACHE_NAME = "einkaufsliste-" + CACHE_VERSION;
 
 const FILES_TO_CACHE = [
@@ -7,8 +7,10 @@ const FILES_TO_CACHE = [
   "./style.css",
   "./app.js",
   "./manifest.json",
-  "./icon-192.png",
-  "./icon-512.png"
+  "./icon-cart-192.png",
+  "./icon-cart-512.png",
+  "./icon-cart-maskable-512.png",
+  "./apple-touch-icon-180.png"
 ];
 
 /* INSTALL */
