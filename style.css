@@ -122,35 +122,35 @@ button:hover {
 }
 
 .action-button {
-    padding: 10px 14px;
     font-size: 20px;
-    border: none;
     background: #e5e7eb;
-    border-radius: 12px;
-    cursor: pointer;
 }
 
 .add-button {
-    flex: 1;
-    padding: 12px;
     background: var(--primary);
     color: white;
-    border: none;
-    border-radius: 12px;
     font-size: 16px;
-    cursor: pointer;
 }
 
 .export-button {
-    padding: 12px 14px;
-    min-width: 106px;
     background: linear-gradient(135deg, #0f172a, #334155);
     color: #f8fafc;
-    border: none;
-    border-radius: 12px;
-    font-size: 14px;
+    font-size: 16px;
     font-weight: 700;
     letter-spacing: 0.01em;
+}
+
+.action-button,
+.add-button,
+.export-button {
+    flex: 1;
+    min-height: 48px;
+    padding: 12px;
+    border: none;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     cursor: pointer;
 }
 
