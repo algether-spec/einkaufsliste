@@ -97,7 +97,13 @@ function eintragAnlegen(text, erledigt = false) {
    MEHRZEILEN-EINGABE
 ====================== */
 
-multiAdd.onclick = () => {
+function fokusInputAmEnde() {
+    multiInput.focus();
+    const pos = multiInput.value.length;
+    multiInput.setSelectionRange(pos, pos);
+}
+
+function mehrzeilenSpeichern() {
     const text = multiInput.value.trim();
     if (!text) return;
 
@@ -109,16 +115,31 @@ multiAdd.onclick = () => {
     speichern();
     multiInput.value = "";
     autoResize();
-    multiInput.focus();
-};
+    fokusInputAmEnde();
+}
+
+multiAdd.onclick = mehrzeilenSpeichern;
 
 btnNewLine.onclick = () => {
     multiInput.value += "\n";
     autoResize();
-    multiInput.focus();
+    fokusInputAmEnde();
 };
 
 multiInput.addEventListener("input", autoResize);
+multiInput.addEventListener("keydown", event => {
+    if (event.key !== "Enter" || event.isComposing) return;
+
+    event.preventDefault();
+    const start = multiInput.selectionStart;
+    const end = multiInput.selectionEnd;
+    const text = multiInput.value;
+    multiInput.value = text.slice(0, start) + "\n" + text.slice(end);
+    const nextPos = start + 1;
+    multiInput.setSelectionRange(nextPos, nextPos);
+    autoResize();
+    multiInput.focus();
+});
 
 function autoResize() {
     multiInput.style.height = "auto";
