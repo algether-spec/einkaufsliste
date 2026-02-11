@@ -380,3 +380,34 @@ nav button.active {
         background: #111827;
     }
 }
+
+@media (max-width: 480px) {
+    .app {
+        margin: 0;
+        border-radius: 0;
+        border: none;
+        box-shadow: none;
+    }
+
+    header {
+        border-radius: 0;
+        padding: 12px 12px;
+    }
+
+    main {
+        padding: 8px;
+    }
+
+    .input-section {
+        padding: 8px;
+        margin-bottom: 8px;
+    }
+
+    .version-badge {
+        margin: 0 8px 2px;
+    }
+
+    nav {
+        border-radius: 0;
+    }
+}
