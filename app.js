@@ -38,10 +38,10 @@ let recognition;
 let isListening = false;
 let finalTranscript = "";
 let latestTranscript = "";
-let hasManualCommitInMicSession = false;
 let micSessionTimer;
 const MIC_SESSION_MS = 30000;
-let pauseTranscriptToInput = false;
+let skipAutoSaveForCurrentBuffer = false;
+let ignoreResultsUntil = 0;
 
 
 /* ======================
@@ -129,11 +129,11 @@ function mehrzeilenSpeichern() {
     multiInput.blur();
 
     if (isListening) {
-        // Keep mic running, but reset buffers to avoid duplicate auto-save on end.
+        // Keep mic running and clear current speech buffer.
         finalTranscript = "";
         latestTranscript = "";
-        hasManualCommitInMicSession = true;
-        pauseTranscriptToInput = true;
+        skipAutoSaveForCurrentBuffer = true;
+        ignoreResultsUntil = Date.now() + 500;
         setMicStatus("Eintrag gespeichert, Spracheingabe laeuft weiter...");
     }
 }
@@ -202,8 +202,8 @@ function initRecognition() {
         isListening = true;
         finalTranscript = "";
         latestTranscript = "";
-        hasManualCommitInMicSession = false;
-        pauseTranscriptToInput = false;
+        skipAutoSaveForCurrentBuffer = false;
+        ignoreResultsUntil = 0;
         setMicButtonState(true);
         setMicStatus("Spracheingabe aktiv (max. 30s)...");
         clearTimeout(micSessionTimer);
@@ -216,6 +216,7 @@ function initRecognition() {
 
     r.onresult = event => {
         if (!isListening) return;
+        if (Date.now() < ignoreResultsUntil) return;
 
         let interimTranscript = "";
 
@@ -228,9 +229,8 @@ function initRecognition() {
 
         const combined = [finalTranscript, interimTranscript].filter(Boolean).join(" ").trim();
         latestTranscript = combined;
-        if (!pauseTranscriptToInput) {
-            setInputWithDictation(combined);
-        }
+        if (combined) skipAutoSaveForCurrentBuffer = false;
+        setInputWithDictation(combined);
     };
 
     r.onerror = event => {
@@ -250,8 +250,8 @@ function initRecognition() {
         clearTimeout(micSessionTimer);
         isListening = false;
         setMicButtonState(false);
-        if (hasManualCommitInMicSession) {
-            hasManualCommitInMicSession = false;
+        if (skipAutoSaveForCurrentBuffer) {
+            skipAutoSaveForCurrentBuffer = false;
             setMicStatus("Spracheingabe beendet.");
             return;
         }
@@ -305,11 +305,6 @@ function toggleDictation() {
 }
 
 if (btnMic) btnMic.onclick = toggleDictation;
-if (multiInput) {
-    multiInput.addEventListener("focus", () => {
-        pauseTranscriptToInput = false;
-    });
-}
 
 
 /* ======================
