@@ -23,6 +23,7 @@ const btnEinkaufen = document.getElementById("btnEinkaufen");
 const btnExport    = document.getElementById("btnExport");
 const modeBadge    = document.getElementById("mode-badge");
 const versionBadge = document.getElementById("version-badge");
+const syncStatus   = document.getElementById("sync-status");
 
 const multiInput = document.getElementById("multi-line-input");
 const multiAdd   = document.getElementById("add-all-button");
@@ -63,11 +64,19 @@ let supabaseUserId = "";
    SPEICHERN & LADEN
 ====================== */
 
+function setSyncStatus(text, tone = "offline") {
+    if (!syncStatus) return;
+    syncStatus.textContent = text;
+    syncStatus.classList.remove("ok", "warn", "offline");
+    syncStatus.classList.add(tone);
+}
+
 async function ensureSupabaseAuth() {
     if (!supabaseClient) return false;
     if (supabaseReady && supabaseUserId) return true;
 
     try {
+        setSyncStatus("Sync: Verbinde...", "warn");
         const sessionResult = await supabaseClient.auth.getSession();
         let user = sessionResult?.data?.session?.user || null;
 
@@ -79,11 +88,13 @@ async function ensureSupabaseAuth() {
         if (!user?.id) return false;
         supabaseUserId = user.id;
         supabaseReady = true;
+        setSyncStatus("Sync: Verbunden", "ok");
         return true;
     } catch (err) {
         console.warn("Supabase Auth nicht verfuegbar:", err);
         supabaseReady = false;
         supabaseUserId = "";
+        setSyncStatus("Sync: Offline (lokal)", "offline");
         return false;
     }
 }
@@ -186,13 +197,16 @@ async function syncRemoteIfNeeded() {
 
     remoteSyncInFlight = true;
     try {
+        setSyncStatus("Sync: Synchronisiere...", "warn");
         do {
             remoteSyncQueued = false;
             const daten = datenAusListeLesen();
             await speichernRemote(daten);
         } while (remoteSyncQueued);
+        setSyncStatus("Sync: Verbunden", "ok");
     } catch (err) {
         console.warn("Remote-Sync fehlgeschlagen, lokal bleibt aktiv:", err);
+        setSyncStatus("Sync: Offline (lokal)", "offline");
     } finally {
         remoteSyncInFlight = false;
     }
@@ -208,6 +222,7 @@ async function laden() {
     const lokaleDaten = ladenLokal();
 
     if (!supabaseClient) {
+        setSyncStatus("Sync: Lokal", "offline");
         datenInListeSchreiben(lokaleDaten);
         return;
     }
@@ -217,13 +232,16 @@ async function laden() {
         if (remoteDaten && remoteDaten.length > 0) {
             datenInListeSchreiben(remoteDaten);
             speichernLokal(remoteDaten);
+            setSyncStatus("Sync: Verbunden", "ok");
             return;
         }
 
         datenInListeSchreiben(lokaleDaten);
         if (lokaleDaten.length > 0) void syncRemoteIfNeeded();
+        else setSyncStatus("Sync: Verbunden", "ok");
     } catch (err) {
         console.warn("Remote-Laden fehlgeschlagen, nutze lokale Daten:", err);
+        setSyncStatus("Sync: Offline (lokal)", "offline");
         datenInListeSchreiben(lokaleDaten);
     }
 }

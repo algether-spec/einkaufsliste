@@ -202,6 +202,26 @@ button:disabled {
     color: #6b7280;
 }
 
+.sync-status {
+    margin: 0 10px 8px;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: #6b7280;
+}
+
+.sync-status.ok {
+    color: #166534;
+}
+
+.sync-status.warn {
+    color: #b45309;
+}
+
+.sync-status.offline {
+    color: #6b7280;
+}
+
 /* Einkaufsmodus: Eingabefeld ausblenden */
 body.modus-einkaufen .input-section {
     display: none !important;
@@ -406,6 +426,10 @@ nav button.active {
 
     .version-badge {
         margin: 0 8px 2px;
+    }
+
+    .sync-status {
+        margin: 0 8px 6px;
     }
 
     nav {
