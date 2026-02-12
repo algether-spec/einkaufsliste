@@ -29,3 +29,6 @@ Setup siehe:
 - `supabase/SETUP.md`
 - `supabase/schema.sql`
 - `config.example.js`
+
+Hinweis:
+- Supabase Sync nutzt anonyme Auth + RLS (jeder User nur eigene Daten).

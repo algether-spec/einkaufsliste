@@ -36,7 +36,6 @@ const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
 const STORAGE_KEY = "einkaufsliste";
-const DEVICE_TOKEN_KEY = "einkaufsliste-device-token";
 const SUPABASE_TABLE = "shopping_items";
 const hasSupabaseConfig = Boolean(
     window.supabase && APP_CONFIG.supabaseUrl && APP_CONFIG.supabaseAnonKey
@@ -56,30 +55,38 @@ let ignoreResultsUntil = 0;
 let restartMicAfterManualCommit = false;
 let remoteSyncInFlight = false;
 let remoteSyncQueued = false;
+let supabaseReady = false;
+let supabaseUserId = "";
 
 
 /* ======================
    SPEICHERN & LADEN
 ====================== */
 
-function randomToken() {
-    if (window.crypto?.randomUUID) return window.crypto.randomUUID();
-    return "tok-" + Date.now() + "-" + Math.random().toString(16).slice(2);
-}
+async function ensureSupabaseAuth() {
+    if (!supabaseClient) return false;
+    if (supabaseReady && supabaseUserId) return true;
 
-function getDeviceToken() {
     try {
-        const existing = localStorage.getItem(DEVICE_TOKEN_KEY);
-        if (existing) return existing;
-        const created = randomToken();
-        localStorage.setItem(DEVICE_TOKEN_KEY, created);
-        return created;
-    } catch {
-        return "fallback-device-token";
+        const sessionResult = await supabaseClient.auth.getSession();
+        let user = sessionResult?.data?.session?.user || null;
+
+        if (!user) {
+            const anonResult = await supabaseClient.auth.signInAnonymously();
+            user = anonResult?.data?.user || null;
+        }
+
+        if (!user?.id) return false;
+        supabaseUserId = user.id;
+        supabaseReady = true;
+        return true;
+    } catch (err) {
+        console.warn("Supabase Auth nicht verfuegbar:", err);
+        supabaseReady = false;
+        supabaseUserId = "";
+        return false;
     }
 }
-
-const deviceToken = getDeviceToken();
 
 function datenAusListeLesen() {
     const daten = [];
@@ -126,11 +133,12 @@ function ladenLokal() {
 
 async function ladenRemote() {
     if (!supabaseClient) return null;
+    if (!(await ensureSupabaseAuth())) return null;
 
     const { data, error } = await supabaseClient
         .from(SUPABASE_TABLE)
         .select("text, erledigt, position")
-        .eq("device_token", deviceToken)
+        .eq("user_id", supabaseUserId)
         .order("position", { ascending: true });
 
     if (error) throw error;
@@ -145,17 +153,18 @@ async function ladenRemote() {
 
 async function speichernRemote(daten) {
     if (!supabaseClient) return;
+    if (!(await ensureSupabaseAuth())) return;
 
     const { error: deleteError } = await supabaseClient
         .from(SUPABASE_TABLE)
         .delete()
-        .eq("device_token", deviceToken);
+        .eq("user_id", supabaseUserId);
 
     if (deleteError) throw deleteError;
     if (!daten.length) return;
 
     const payload = daten.map((e, index) => ({
-        device_token: deviceToken,
+        user_id: supabaseUserId,
         text: e.text,
         erledigt: e.erledigt,
         position: index
