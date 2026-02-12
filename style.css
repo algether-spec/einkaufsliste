@@ -55,6 +55,10 @@ header {
     align-items: center;
 }
 
+.auth-bar.is-hidden {
+    display: none !important;
+}
+
 .auth-email {
     width: 100%;
     min-width: 0;

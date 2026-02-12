@@ -42,7 +42,7 @@ const btnMic     = document.getElementById("mic-button");
 const micStatus  = document.getElementById("mic-status");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.18";
+const APP_VERSION = "1.0.19";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -136,7 +136,11 @@ function applySyncCode(code, shouldReload = true) {
 
 function setSyncEditMode(enabled) {
     syncEditMode = Boolean(enabled);
-    if (authBar) authBar.hidden = !syncEditMode || modus !== "erfassen";
+    const showAuthBar = syncEditMode && modus === "erfassen";
+    if (authBar) {
+        authBar.hidden = !showAuthBar;
+        authBar.classList.toggle("is-hidden", !showAuthBar);
+    }
     if (syncCodeCompact) syncCodeCompact.hidden = modus !== "erfassen";
     if (syncCodeInput && syncEditMode && modus === "erfassen") {
         syncCodeInput.focus();
@@ -765,7 +769,11 @@ function setModus(neu) {
     if (modeBadge) modeBadge.textContent = modus === "einkaufen" ? "Einkaufen" : "Erfassen";
     document.body.classList.toggle("modus-einkaufen", modus === "einkaufen");
     if (syncCodeCompact) syncCodeCompact.hidden = modus !== "erfassen";
-    if (authBar) authBar.hidden = modus !== "erfassen" || !syncEditMode;
+    if (authBar) {
+        const showAuthBar = modus === "erfassen" && syncEditMode;
+        authBar.hidden = !showAuthBar;
+        authBar.classList.toggle("is-hidden", !showAuthBar);
+    }
 
     if (vorher === "einkaufen" && neu === "erfassen") {
         liste.querySelectorAll("li.erledigt").forEach(li => li.remove());
