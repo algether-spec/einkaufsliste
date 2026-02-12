@@ -21,6 +21,7 @@ const liste = document.getElementById("liste");
 const btnErfassen  = document.getElementById("btnErfassen");
 const btnEinkaufen = document.getElementById("btnEinkaufen");
 const btnExport    = document.getElementById("btnExport");
+const btnForceUpdate = document.getElementById("btn-force-update");
 const modeBadge    = document.getElementById("mode-badge");
 const versionBadge = document.getElementById("version-badge");
 const syncStatus   = document.getElementById("sync-status");
@@ -38,7 +39,7 @@ const btnMic     = document.getElementById("mic-button");
 const micStatus  = document.getElementById("mic-status");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.14";
+const APP_VERSION = "1.0.15";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -170,6 +171,39 @@ function getSyncErrorHint(err) {
         return "Netzwerkfehler. Internetverbindung pruefen.";
     }
     return "Sync-Fehler. Bitte spaeter erneut versuchen.";
+}
+
+async function forceAppUpdate() {
+    if (btnForceUpdate) btnForceUpdate.disabled = true;
+    setSyncStatus("Update: wird geladen...", "warn");
+
+    try {
+        if ("serviceWorker" in navigator) {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            for (const registration of registrations) {
+                await registration.update();
+                if (registration.waiting) {
+                    registration.waiting.postMessage({ type: "SKIP_WAITING" });
+                }
+            }
+        }
+
+        if ("caches" in window) {
+            const keys = await caches.keys();
+            await Promise.all(
+                keys
+                    .filter(key => key.startsWith("einkaufsliste-"))
+                    .map(key => caches.delete(key))
+            );
+        }
+
+        location.reload();
+    } catch (err) {
+        console.warn("Update fehlgeschlagen:", err);
+        setSyncStatus("Update fehlgeschlagen", "offline");
+        setAuthStatus("Update fehlgeschlagen. Bitte Seite neu laden.");
+        if (btnForceUpdate) btnForceUpdate.disabled = false;
+    }
 }
 
 function updateSyncDebug() {
@@ -689,6 +723,7 @@ if (btnMic && !SpeechRecognitionCtor) {
 }
 
 setupSyncCodeUi();
+if (btnForceUpdate) btnForceUpdate.onclick = () => void forceAppUpdate();
 
 if (supabaseClient) {
     void laden();

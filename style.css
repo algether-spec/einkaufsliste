@@ -236,11 +236,30 @@ button:disabled {
 }
 
 .version-badge {
-    margin: 0 10px 4px;
-    text-align: center;
+    margin: 0;
+    text-align: left;
     font-size: 12px;
     font-weight: 600;
     color: #6b7280;
+}
+
+.version-row {
+    margin: 0 10px 4px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.update-button {
+    min-height: 32px;
+    padding: 6px 10px;
+    border-radius: 10px;
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    color: #0f172a;
+    font-size: 12px;
+    font-weight: 700;
 }
 
 .sync-status {

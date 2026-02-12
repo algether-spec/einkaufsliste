@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v1.0.14";
+const CACHE_VERSION = "v1.0.15";
 const CACHE_NAME = "einkaufsliste-" + CACHE_VERSION;
 
 const FILES_TO_CACHE = [
@@ -36,6 +36,12 @@ self.addEventListener("activate", event => {
   );
 
   self.clients.claim();
+});
+
+self.addEventListener("message", event => {
+  if (event.data?.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
 });
 
 /* FETCH */
