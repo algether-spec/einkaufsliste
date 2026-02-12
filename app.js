@@ -22,6 +22,8 @@ const btnErfassen  = document.getElementById("btnErfassen");
 const btnEinkaufen = document.getElementById("btnEinkaufen");
 const btnExport    = document.getElementById("btnExport");
 const btnForceUpdate = document.getElementById("btn-force-update");
+const syncCodeCompact = document.getElementById("sync-code-compact");
+const btnSyncCodeDisplay = document.getElementById("btn-sync-code-display");
 const modeBadge    = document.getElementById("mode-badge");
 const versionBadge = document.getElementById("version-badge");
 const syncStatus   = document.getElementById("sync-status");
@@ -39,7 +41,7 @@ const btnMic     = document.getElementById("mic-button");
 const micStatus  = document.getElementById("mic-status");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.16";
+const APP_VERSION = "1.0.17";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -123,15 +125,26 @@ function applySyncCode(code, shouldReload = true) {
     currentSyncCode = normalized;
     localStorage.setItem(SYNC_CODE_KEY, currentSyncCode);
     if (syncCodeInput) syncCodeInput.value = currentSyncCode;
+    if (btnSyncCodeDisplay) btnSyncCodeDisplay.textContent = currentSyncCode;
     setAuthStatus(`Geraete-Code: ${currentSyncCode}`);
     updateSyncDebug();
     if (shouldReload) void laden();
+}
+
+function showCodePrompt() {
+    const entered = window.prompt("4-stelligen Geraete-Code eingeben", currentSyncCode || "");
+    if (entered == null) return;
+    applySyncCode(entered);
 }
 
 function setupSyncCodeUi() {
     if (!authBar) return;
 
     applySyncCode(getStoredSyncCode(), false);
+
+    authBar.hidden = true;
+    if (syncStatus) syncStatus.hidden = true;
+    if (syncCodeCompact) syncCodeCompact.hidden = false;
 
     if (!hasSupabaseCredentials) {
         setAuthStatus("Supabase nicht konfiguriert. App laeuft nur lokal.");
@@ -146,6 +159,54 @@ function setupSyncCodeUi() {
     if (btnSyncNew) {
         btnSyncNew.onclick = () => applySyncCode(generateSyncCode());
     }
+
+    if (btnSyncCodeDisplay) {
+        btnSyncCodeDisplay.onclick = showCodePrompt;
+    }
+}
+
+function normalizeListData(daten) {
+    if (!Array.isArray(daten)) return [];
+    return daten
+        .map((e, index) => ({
+            text: String(e?.text || "").trim(),
+            erledigt: Boolean(e?.erledigt),
+            position: Number.isFinite(e?.position) ? e.position : index
+        }))
+        .filter(e => e.text.length > 0)
+        .map((e, index) => ({ ...e, position: index }));
+}
+
+function listDataSignature(daten) {
+    return JSON.stringify(
+        normalizeListData(daten).map(e => ({
+            text: e.text.toLowerCase(),
+            erledigt: e.erledigt
+        }))
+    );
+}
+
+function mergeListConflict(localDaten, remoteDaten) {
+    const local = normalizeListData(localDaten);
+    const remote = normalizeListData(remoteDaten);
+    const merged = [];
+    const seen = new Set();
+
+    for (const item of local) {
+        const key = item.text.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        merged.push({ text: item.text, erledigt: item.erledigt, position: merged.length });
+    }
+
+    for (const item of remote) {
+        const key = item.text.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        merged.push({ text: item.text, erledigt: item.erledigt, position: merged.length });
+    }
+
+    return merged;
 }
 
 function shortUserId(id) {
@@ -360,8 +421,23 @@ async function syncRemoteIfNeeded() {
         setSyncStatus("Sync: Synchronisiere...", "warn");
         do {
             remoteSyncQueued = false;
-            const daten = datenAusListeLesen();
-            await speichernRemote(daten);
+            const lokaleDaten = normalizeListData(datenAusListeLesen());
+            const remoteVorher = await ladenRemote();
+            let datenZumSpeichern = lokaleDaten;
+
+            if (Array.isArray(remoteVorher)) {
+                const remoteDaten = normalizeListData(remoteVorher);
+                if (listDataSignature(lokaleDaten) !== listDataSignature(remoteDaten)) {
+                    datenZumSpeichern = mergeListConflict(lokaleDaten, remoteDaten);
+                    if (listDataSignature(datenZumSpeichern) !== listDataSignature(lokaleDaten)) {
+                        datenInListeSchreiben(datenZumSpeichern);
+                        speichernLokal(datenZumSpeichern);
+                        setAuthStatus("Konflikt erkannt: Listen wurden zusammengefuehrt.");
+                    }
+                }
+            }
+
+            await speichernRemote(datenZumSpeichern);
         } while (remoteSyncQueued);
         lastSyncAt = formatTimeIso(new Date());
         setSyncStatus("Sync: Verbunden", "ok");
@@ -679,6 +755,7 @@ function setModus(neu) {
     btnEinkaufen.classList.toggle("active", modus === "einkaufen");
     if (modeBadge) modeBadge.textContent = modus === "einkaufen" ? "Einkaufen" : "Erfassen";
     document.body.classList.toggle("modus-einkaufen", modus === "einkaufen");
+    if (syncCodeCompact) syncCodeCompact.hidden = modus !== "erfassen";
 
     if (vorher === "einkaufen" && neu === "erfassen") {
         liste.querySelectorAll("li.erledigt").forEach(li => li.remove());

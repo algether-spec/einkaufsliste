@@ -85,6 +85,30 @@ header {
     color: #6b7280;
 }
 
+.sync-code-compact {
+    margin: 8px 10px 0;
+    padding: 6px 10px;
+    border-radius: 10px;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    font-size: 12px;
+    color: #64748b;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sync-code-display {
+    min-height: 28px;
+    padding: 4px 10px;
+    border-radius: 8px;
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    color: #0f172a;
+    font-size: 13px;
+    font-weight: 700;
+}
+
 .badge-free {
     margin-left: 8px;
     padding: 2px 8px;
