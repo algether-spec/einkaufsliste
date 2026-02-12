@@ -1,6 +1,6 @@
 create table if not exists public.shopping_items (
   id bigint generated always as identity primary key,
-  user_id uuid not null references auth.users (id) on delete cascade,
+  sync_code text not null,
   text text not null,
   erledigt boolean not null default false,
   position integer not null default 0,
@@ -8,11 +8,11 @@ create table if not exists public.shopping_items (
   updated_at timestamptz not null default now()
 );
 
-create index if not exists shopping_items_user_id_idx
-  on public.shopping_items (user_id);
+create index if not exists shopping_items_sync_code_idx
+  on public.shopping_items (sync_code);
 
-create index if not exists shopping_items_user_id_position_idx
-  on public.shopping_items (user_id, position);
+create index if not exists shopping_items_sync_code_position_idx
+  on public.shopping_items (sync_code, position);
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -31,27 +31,27 @@ for each row execute function public.set_updated_at();
 
 alter table public.shopping_items enable row level security;
 
-drop policy if exists "shopping_items_select_own" on public.shopping_items;
-create policy "shopping_items_select_own"
+drop policy if exists "shopping_items_select_by_code" on public.shopping_items;
+create policy "shopping_items_select_by_code"
 on public.shopping_items
 for select
-using (auth.uid() = user_id);
+using (true);
 
-drop policy if exists "shopping_items_insert_own" on public.shopping_items;
-create policy "shopping_items_insert_own"
+drop policy if exists "shopping_items_insert_by_code" on public.shopping_items;
+create policy "shopping_items_insert_by_code"
 on public.shopping_items
 for insert
-with check (auth.uid() = user_id);
+with check (sync_code is not null and length(sync_code) > 0);
 
-drop policy if exists "shopping_items_update_own" on public.shopping_items;
-create policy "shopping_items_update_own"
+drop policy if exists "shopping_items_update_by_code" on public.shopping_items;
+create policy "shopping_items_update_by_code"
 on public.shopping_items
 for update
-using (auth.uid() = user_id)
-with check (auth.uid() = user_id);
+using (true)
+with check (sync_code is not null and length(sync_code) > 0);
 
-drop policy if exists "shopping_items_delete_own" on public.shopping_items;
-create policy "shopping_items_delete_own"
+drop policy if exists "shopping_items_delete_by_code" on public.shopping_items;
+create policy "shopping_items_delete_by_code"
 on public.shopping_items
 for delete
-using (auth.uid() = user_id);
+using (true);

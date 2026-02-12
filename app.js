@@ -26,9 +26,9 @@ const versionBadge = document.getElementById("version-badge");
 const syncStatus   = document.getElementById("sync-status");
 const syncDebug    = document.getElementById("sync-debug");
 const authBar      = document.getElementById("auth-bar");
-const authEmail    = document.getElementById("auth-email");
-const btnAuthLink  = document.getElementById("btn-auth-link");
-const btnAuthLogout = document.getElementById("btn-auth-logout");
+const syncCodeInput = document.getElementById("sync-code");
+const btnSyncApply  = document.getElementById("btn-sync-apply");
+const btnSyncNew    = document.getElementById("btn-sync-new");
 const authStatus   = document.getElementById("auth-status");
 
 const multiInput = document.getElementById("multi-line-input");
@@ -44,6 +44,7 @@ const SpeechRecognitionCtor =
 const APP_CONFIG = window.APP_CONFIG || {};
 const STORAGE_KEY = "einkaufsliste";
 const SUPABASE_TABLE = "shopping_items";
+const SYNC_CODE_KEY = "einkaufsliste-sync-code";
 const hasSupabaseConfig = Boolean(
     window.supabase && APP_CONFIG.supabaseUrl && APP_CONFIG.supabaseAnonKey
 );
@@ -66,6 +67,7 @@ let supabaseReady = false;
 let supabaseUserId = "";
 let lastSyncAt = "";
 const debugEnabled = new URLSearchParams(location.search).get("debug") === "1";
+let currentSyncCode = "";
 
 
 /* ======================
@@ -84,85 +86,52 @@ function setAuthStatus(text) {
     authStatus.textContent = text;
 }
 
-function updateAuthUi(user) {
-    if (!supabaseClient || !authBar) return;
-    if (!user) {
-        if (btnAuthLogout) btnAuthLogout.hidden = true;
-        setAuthStatus("Gastmodus aktiv. Für Geräte-Sync mit E-Mail anmelden.");
+function normalizeSyncCode(input) {
+    return String(input || "")
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9_-]/g, "");
+}
+
+function generateSyncCode() {
+    return "LISTE-" + Math.random().toString(36).slice(2, 8).toUpperCase();
+}
+
+function getStoredSyncCode() {
+    const stored = normalizeSyncCode(localStorage.getItem(SYNC_CODE_KEY) || "");
+    if (stored) return stored;
+    const created = generateSyncCode();
+    localStorage.setItem(SYNC_CODE_KEY, created);
+    return created;
+}
+
+function applySyncCode(code, shouldReload = true) {
+    const normalized = normalizeSyncCode(code);
+    if (!normalized) {
+        setAuthStatus("Bitte gueltigen Code eingeben.");
         return;
     }
 
-    const email = user.email || "";
-    const isAnonymous = Boolean(user.is_anonymous);
-    if (btnAuthLogout) btnAuthLogout.hidden = false;
-    if (authEmail) authEmail.value = email;
-
-    if (isAnonymous) setAuthStatus("Gastmodus aktiv.");
-    else setAuthStatus(`Angemeldet: ${email}`);
+    currentSyncCode = normalized;
+    localStorage.setItem(SYNC_CODE_KEY, currentSyncCode);
+    if (syncCodeInput) syncCodeInput.value = currentSyncCode;
+    setAuthStatus(`Geraete-Code: ${currentSyncCode}`);
+    updateSyncDebug();
+    if (shouldReload) void laden();
 }
 
-async function sendMagicLink() {
-    if (!supabaseClient || !authEmail) return;
-    const email = authEmail.value.trim();
-    if (!email) {
-        setAuthStatus("Bitte E-Mail eingeben.");
-        return;
+function setupSyncCodeUi() {
+    if (!authBar) return;
+
+    applySyncCode(getStoredSyncCode(), false);
+
+    if (btnSyncApply) {
+        btnSyncApply.onclick = () => applySyncCode(syncCodeInput?.value || "");
     }
 
-    setAuthStatus("Sende Link...");
-    const { error } = await supabaseClient.auth.signInWithOtp({
-        email,
-        options: {
-            emailRedirectTo: location.origin + location.pathname
-        }
-    });
-
-    if (error) {
-        setAuthStatus("Link fehlgeschlagen: " + error.message);
-        return;
+    if (btnSyncNew) {
+        btnSyncNew.onclick = () => applySyncCode(generateSyncCode());
     }
-    setAuthStatus("Link gesendet. Mail öffnen und bestätigen.");
-}
-
-async function logoutAuth() {
-    if (!supabaseClient) return;
-    const { error } = await supabaseClient.auth.signOut();
-    if (error) {
-        setAuthStatus("Abmelden fehlgeschlagen: " + error.message);
-        return;
-    }
-    supabaseReady = false;
-    supabaseUserId = "";
-    updateAuthUi(null);
-    await laden();
-}
-
-function getSessionUser(sessionData) {
-    return sessionData?.data?.session?.user || null;
-}
-
-async function setupAuthUi() {
-    if (!supabaseClient || !authBar) return;
-
-    if (btnAuthLink) btnAuthLink.onclick = () => void sendMagicLink();
-    if (btnAuthLogout) btnAuthLogout.onclick = () => void logoutAuth();
-
-    const session = await supabaseClient.auth.getSession();
-    updateAuthUi(getSessionUser(session));
-
-    supabaseClient.auth.onAuthStateChange((_event, sessionData) => {
-        const user = sessionData?.user || sessionData?.session?.user || null;
-        if (user?.id) {
-            supabaseUserId = user.id;
-            supabaseReady = true;
-        } else {
-            supabaseUserId = "";
-            supabaseReady = false;
-        }
-        updateAuthUi(user);
-        updateSyncDebug();
-        void laden();
-    });
 }
 
 function shortUserId(id) {
@@ -185,7 +154,8 @@ function updateSyncDebug() {
     syncDebug.hidden = false;
     const uid = shortUserId(supabaseUserId);
     const syncText = lastSyncAt || "-";
-    syncDebug.textContent = `debug uid=${uid} lastSync=${syncText}`;
+    const code = currentSyncCode || "-";
+    syncDebug.textContent = `debug code=${code} uid=${uid} lastSync=${syncText}`;
 }
 
 async function ensureSupabaseAuth() {
@@ -195,7 +165,7 @@ async function ensureSupabaseAuth() {
     try {
         setSyncStatus("Sync: Verbinde...", "warn");
         const sessionResult = await supabaseClient.auth.getSession();
-        let user = getSessionUser(sessionResult);
+        let user = sessionResult?.data?.session?.user || null;
 
         if (!user) {
             const anonResult = await supabaseClient.auth.signInAnonymously();
@@ -205,7 +175,6 @@ async function ensureSupabaseAuth() {
         if (!user?.id) return false;
         supabaseUserId = user.id;
         supabaseReady = true;
-        updateAuthUi(user);
         setSyncStatus("Sync: Verbunden", "ok");
         updateSyncDebug();
         return true;
@@ -269,7 +238,7 @@ async function ladenRemote() {
     const { data, error } = await supabaseClient
         .from(SUPABASE_TABLE)
         .select("text, erledigt, position")
-        .eq("user_id", supabaseUserId)
+        .eq("sync_code", currentSyncCode)
         .order("position", { ascending: true });
 
     if (error) throw error;
@@ -289,13 +258,13 @@ async function speichernRemote(daten) {
     const { error: deleteError } = await supabaseClient
         .from(SUPABASE_TABLE)
         .delete()
-        .eq("user_id", supabaseUserId);
+        .eq("sync_code", currentSyncCode);
 
     if (deleteError) throw deleteError;
     if (!daten.length) return;
 
     const payload = daten.map((e, index) => ({
-        user_id: supabaseUserId,
+        sync_code: currentSyncCode,
         text: e.text,
         erledigt: e.erledigt,
         position: index
@@ -679,7 +648,6 @@ btnExport.onclick = async () => {
    INIT
 ====================== */
 
-laden();
 setModus("erfassen");
 if (versionBadge) versionBadge.textContent = "v" + APP_VERSION;
 updateSyncDebug();
@@ -690,8 +658,10 @@ if (btnMic && !SpeechRecognitionCtor) {
     setMicStatus("Spracherkennung wird in diesem Browser nicht unterstuetzt.");
 }
 
+setupSyncCodeUi();
+
 if (supabaseClient) {
-    void setupAuthUi();
+    void laden();
 } else if (authBar) {
     authBar.hidden = true;
 }
