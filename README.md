@@ -22,3 +22,13 @@ npm run check
 Enthaelt:
 - JS-Syntaxcheck fuer `app.js` und `service-worker.js`
 - Smoke-Test mit lokalem HTTP-Server (HTML/Manifest/Service-Worker)
+
+## Supabase (optional)
+
+Setup siehe:
+- `supabase/SETUP.md`
+- `supabase/schema.sql`
+- `config.example.js`
+
+Hinweis:
+- Supabase Sync nutzt anonyme Auth + RLS (jeder User nur eigene Daten).

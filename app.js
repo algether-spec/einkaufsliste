@@ -23,6 +23,8 @@ const btnEinkaufen = document.getElementById("btnEinkaufen");
 const btnExport    = document.getElementById("btnExport");
 const modeBadge    = document.getElementById("mode-badge");
 const versionBadge = document.getElementById("version-badge");
+const syncStatus   = document.getElementById("sync-status");
+const syncDebug    = document.getElementById("sync-debug");
 
 const multiInput = document.getElementById("multi-line-input");
 const multiAdd   = document.getElementById("add-all-button");
@@ -34,6 +36,15 @@ let modus = "erfassen";
 const APP_VERSION = "1.0.12";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
+const APP_CONFIG = window.APP_CONFIG || {};
+const STORAGE_KEY = "einkaufsliste";
+const SUPABASE_TABLE = "shopping_items";
+const hasSupabaseConfig = Boolean(
+    window.supabase && APP_CONFIG.supabaseUrl && APP_CONFIG.supabaseAnonKey
+);
+const supabaseClient = hasSupabaseConfig
+    ? window.supabase.createClient(APP_CONFIG.supabaseUrl, APP_CONFIG.supabaseAnonKey)
+    : null;
 
 let recognition;
 let isListening = false;
@@ -44,35 +55,232 @@ const MIC_SESSION_MS = 30000;
 let skipAutoSaveForCurrentBuffer = false;
 let ignoreResultsUntil = 0;
 let restartMicAfterManualCommit = false;
+let remoteSyncInFlight = false;
+let remoteSyncQueued = false;
+let supabaseReady = false;
+let supabaseUserId = "";
+let lastSyncAt = "";
+const debugEnabled = new URLSearchParams(location.search).get("debug") === "1";
 
 
 /* ======================
    SPEICHERN & LADEN
 ====================== */
 
-function speichern() {
+function setSyncStatus(text, tone = "offline") {
+    if (!syncStatus) return;
+    syncStatus.textContent = text;
+    syncStatus.classList.remove("ok", "warn", "offline");
+    syncStatus.classList.add(tone);
+}
+
+function shortUserId(id) {
+    if (!id) return "-";
+    if (id.length <= 12) return id;
+    return id.slice(0, 8) + "..." + id.slice(-4);
+}
+
+function formatTimeIso(date) {
+    return date.toISOString().replace("T", " ").slice(0, 19) + "Z";
+}
+
+function updateSyncDebug() {
+    if (!syncDebug) return;
+    if (!debugEnabled) {
+        syncDebug.hidden = true;
+        return;
+    }
+
+    syncDebug.hidden = false;
+    const uid = shortUserId(supabaseUserId);
+    const syncText = lastSyncAt || "-";
+    syncDebug.textContent = `debug uid=${uid} lastSync=${syncText}`;
+}
+
+async function ensureSupabaseAuth() {
+    if (!supabaseClient) return false;
+    if (supabaseReady && supabaseUserId) return true;
+
+    try {
+        setSyncStatus("Sync: Verbinde...", "warn");
+        const sessionResult = await supabaseClient.auth.getSession();
+        let user = sessionResult?.data?.session?.user || null;
+
+        if (!user) {
+            const anonResult = await supabaseClient.auth.signInAnonymously();
+            user = anonResult?.data?.user || null;
+        }
+
+        if (!user?.id) return false;
+        supabaseUserId = user.id;
+        supabaseReady = true;
+        setSyncStatus("Sync: Verbunden", "ok");
+        updateSyncDebug();
+        return true;
+    } catch (err) {
+        console.warn("Supabase Auth nicht verfuegbar:", err);
+        supabaseReady = false;
+        supabaseUserId = "";
+        setSyncStatus("Sync: Offline (lokal)", "offline");
+        updateSyncDebug();
+        return false;
+    }
+}
+
+function datenAusListeLesen() {
     const daten = [];
 
-    liste.querySelectorAll("li").forEach(li => {
+    liste.querySelectorAll("li").forEach((li, index) => {
         daten.push({
             text: li.dataset.text,
-            erledigt: li.classList.contains("erledigt")
+            erledigt: li.classList.contains("erledigt"),
+            position: index
         });
     });
 
-    localStorage.setItem("einkaufsliste", JSON.stringify(daten));
+    return daten;
 }
 
-function laden() {
-    const raw = localStorage.getItem("einkaufsliste");
-    if (!raw) return;
+function datenInListeSchreiben(daten) {
+    liste.innerHTML = "";
+    daten.forEach(e => eintragAnlegen(e.text, e.erledigt));
+}
+
+function speichernLokal(daten) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(daten));
+}
+
+function ladenLokal() {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
 
     try {
-        JSON.parse(raw).forEach(e =>
-            eintragAnlegen(e.text, e.erledigt)
-        );
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        return parsed
+            .map((e, index) => ({
+                text: String(e.text || ""),
+                erledigt: Boolean(e.erledigt),
+                position: Number.isFinite(e.position) ? e.position : index
+            }))
+            .filter(e => e.text.trim().length > 0);
     } catch (err) {
-        console.warn("Fehler beim Laden:", err);
+        console.warn("Fehler beim lokalen Laden:", err);
+        return [];
+    }
+}
+
+async function ladenRemote() {
+    if (!supabaseClient) return null;
+    if (!(await ensureSupabaseAuth())) return null;
+
+    const { data, error } = await supabaseClient
+        .from(SUPABASE_TABLE)
+        .select("text, erledigt, position")
+        .eq("user_id", supabaseUserId)
+        .order("position", { ascending: true });
+
+    if (error) throw error;
+    if (!Array.isArray(data)) return [];
+
+    return data.map((e, index) => ({
+        text: String(e.text || ""),
+        erledigt: Boolean(e.erledigt),
+        position: Number.isFinite(e.position) ? e.position : index
+    }));
+}
+
+async function speichernRemote(daten) {
+    if (!supabaseClient) return;
+    if (!(await ensureSupabaseAuth())) return;
+
+    const { error: deleteError } = await supabaseClient
+        .from(SUPABASE_TABLE)
+        .delete()
+        .eq("user_id", supabaseUserId);
+
+    if (deleteError) throw deleteError;
+    if (!daten.length) return;
+
+    const payload = daten.map((e, index) => ({
+        user_id: supabaseUserId,
+        text: e.text,
+        erledigt: e.erledigt,
+        position: index
+    }));
+
+    const { error: insertError } = await supabaseClient
+        .from(SUPABASE_TABLE)
+        .insert(payload);
+
+    if (insertError) throw insertError;
+}
+
+async function syncRemoteIfNeeded() {
+    if (!supabaseClient) return;
+    if (remoteSyncInFlight) {
+        remoteSyncQueued = true;
+        return;
+    }
+
+    remoteSyncInFlight = true;
+    try {
+        setSyncStatus("Sync: Synchronisiere...", "warn");
+        do {
+            remoteSyncQueued = false;
+            const daten = datenAusListeLesen();
+            await speichernRemote(daten);
+        } while (remoteSyncQueued);
+        lastSyncAt = formatTimeIso(new Date());
+        setSyncStatus("Sync: Verbunden", "ok");
+        updateSyncDebug();
+    } catch (err) {
+        console.warn("Remote-Sync fehlgeschlagen, lokal bleibt aktiv:", err);
+        setSyncStatus("Sync: Offline (lokal)", "offline");
+        updateSyncDebug();
+    } finally {
+        remoteSyncInFlight = false;
+    }
+}
+
+function speichern() {
+    const daten = datenAusListeLesen();
+    speichernLokal(daten);
+    void syncRemoteIfNeeded();
+}
+
+async function laden() {
+    const lokaleDaten = ladenLokal();
+
+    if (!supabaseClient) {
+        setSyncStatus("Sync: Lokal", "offline");
+        updateSyncDebug();
+        datenInListeSchreiben(lokaleDaten);
+        return;
+    }
+
+    try {
+        const remoteDaten = await ladenRemote();
+        if (remoteDaten && remoteDaten.length > 0) {
+            datenInListeSchreiben(remoteDaten);
+            speichernLokal(remoteDaten);
+            setSyncStatus("Sync: Verbunden", "ok");
+            lastSyncAt = formatTimeIso(new Date());
+            updateSyncDebug();
+            return;
+        }
+
+        datenInListeSchreiben(lokaleDaten);
+        if (lokaleDaten.length > 0) void syncRemoteIfNeeded();
+        else {
+            setSyncStatus("Sync: Verbunden", "ok");
+            updateSyncDebug();
+        }
+    } catch (err) {
+        console.warn("Remote-Laden fehlgeschlagen, nutze lokale Daten:", err);
+        setSyncStatus("Sync: Offline (lokal)", "offline");
+        updateSyncDebug();
+        datenInListeSchreiben(lokaleDaten);
     }
 }
 
@@ -382,6 +590,7 @@ btnExport.onclick = async () => {
 laden();
 setModus("erfassen");
 if (versionBadge) versionBadge.textContent = "v" + APP_VERSION;
+updateSyncDebug();
 
 if (btnMic && !SpeechRecognitionCtor) {
     btnMic.disabled = true;
