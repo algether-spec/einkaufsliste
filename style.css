@@ -51,7 +51,7 @@ header {
     padding: 8px;
     border-radius: 12px;
     display: grid;
-    grid-template-columns: 1fr auto auto;
+    grid-template-columns: minmax(0, 1fr) auto auto;
     gap: 8px;
     align-items: center;
     position: absolute;
@@ -77,9 +77,9 @@ header {
 
 .auth-button {
     min-height: 40px;
-    padding: 8px 12px;
+    padding: 8px 10px;
     border-radius: 10px;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 700;
     border: none;
     background: #2563eb;
@@ -549,6 +549,16 @@ nav button.active {
         right: 8px;
         top: 98px;
         padding: 6px;
+        grid-template-columns: 1fr 1fr;
+        row-gap: 6px;
+    }
+
+    .auth-email {
+        grid-column: 1 / -1;
+    }
+
+    .auth-button {
+        width: 100%;
     }
 
     .input-section {
