@@ -211,7 +211,7 @@ button:disabled {
 
 .input-actions {
     display: grid;
-    grid-template-columns: 1fr 2fr 1fr;
+    grid-template-columns: 1fr 1fr 2fr 1fr;
     gap: 8px;
     align-items: stretch;
 }
@@ -225,6 +225,13 @@ button:disabled {
     background: var(--primary);
     color: white;
     font-size: 16px;
+}
+
+.clear-input-button {
+    background: #fee2e2;
+    color: #b91c1c;
+    font-size: 14px;
+    font-weight: 700;
 }
 
 .export-button {
@@ -249,6 +256,7 @@ button:disabled {
 
 .action-button,
 .mic-button,
+.clear-input-button,
 .add-button,
 .export-button {
     width: 100%;
@@ -267,6 +275,7 @@ button:disabled {
 }
 
 .mic-button,
+.clear-input-button,
 .export-button {
     grid-column: span 1;
 }

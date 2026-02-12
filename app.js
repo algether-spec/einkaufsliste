@@ -37,12 +37,13 @@ const authStatus   = document.getElementById("auth-status");
 
 const multiInput = document.getElementById("multi-line-input");
 const multiAdd   = document.getElementById("add-all-button");
+const btnClearInput = document.getElementById("btn-clear-input");
 const btnNewLine = document.getElementById("newline-button");
 const btnMic     = document.getElementById("mic-button");
 const micStatus  = document.getElementById("mic-status");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.21";
+const APP_VERSION = "1.0.22";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -71,6 +72,7 @@ let ignoreResultsUntil = 0;
 let restartMicAfterManualCommit = false;
 let remoteSyncInFlight = false;
 let remoteSyncQueued = false;
+let remoteSyncForceOverwrite = false;
 let supabaseReady = false;
 let supabaseUserId = "";
 let lastSyncAt = "";
@@ -423,10 +425,11 @@ async function speichernRemote(daten) {
     if (insertError) throw insertError;
 }
 
-async function syncRemoteIfNeeded() {
+async function syncRemoteIfNeeded(forceOverwrite = false) {
     if (!supabaseClient) return;
     if (remoteSyncInFlight) {
         remoteSyncQueued = true;
+        remoteSyncForceOverwrite = remoteSyncForceOverwrite || forceOverwrite;
         return;
     }
 
@@ -434,19 +437,24 @@ async function syncRemoteIfNeeded() {
     try {
         setSyncStatus("Sync: Synchronisiere...", "warn");
         do {
+            const overwriteThisRun = forceOverwrite || remoteSyncForceOverwrite;
+            forceOverwrite = false;
+            remoteSyncForceOverwrite = false;
             remoteSyncQueued = false;
             const lokaleDaten = normalizeListData(datenAusListeLesen());
-            const remoteVorher = await ladenRemote();
             let datenZumSpeichern = lokaleDaten;
 
-            if (Array.isArray(remoteVorher)) {
-                const remoteDaten = normalizeListData(remoteVorher);
-                if (listDataSignature(lokaleDaten) !== listDataSignature(remoteDaten)) {
-                    datenZumSpeichern = mergeListConflict(lokaleDaten, remoteDaten);
-                    if (listDataSignature(datenZumSpeichern) !== listDataSignature(lokaleDaten)) {
-                        datenInListeSchreiben(datenZumSpeichern);
-                        speichernLokal(datenZumSpeichern);
-                        setAuthStatus("Konflikt erkannt: Listen wurden zusammengefuehrt.");
+            if (!overwriteThisRun) {
+                const remoteVorher = await ladenRemote();
+                if (Array.isArray(remoteVorher)) {
+                    const remoteDaten = normalizeListData(remoteVorher);
+                    if (listDataSignature(lokaleDaten) !== listDataSignature(remoteDaten)) {
+                        datenZumSpeichern = mergeListConflict(lokaleDaten, remoteDaten);
+                        if (listDataSignature(datenZumSpeichern) !== listDataSignature(lokaleDaten)) {
+                            datenInListeSchreiben(datenZumSpeichern);
+                            speichernLokal(datenZumSpeichern);
+                            setAuthStatus("Konflikt erkannt: Listen wurden zusammengefuehrt.");
+                        }
                     }
                 }
             }
@@ -466,10 +474,10 @@ async function syncRemoteIfNeeded() {
     }
 }
 
-function speichern() {
+function speichern(forceOverwrite = false) {
     const daten = datenAusListeLesen();
     speichernLokal(daten);
-    void syncRemoteIfNeeded();
+    void syncRemoteIfNeeded(forceOverwrite);
 }
 
 async function laden() {
@@ -576,6 +584,13 @@ function mehrzeilenSpeichern() {
 }
 
 multiAdd.onclick = mehrzeilenSpeichern;
+if (btnClearInput) {
+    btnClearInput.onclick = () => {
+        multiInput.value = "";
+        autoResize();
+        multiInput.focus();
+    };
+}
 
 btnNewLine.onclick = () => {
     multiInput.value += "\n";
@@ -778,7 +793,7 @@ function setModus(neu) {
 
     if (vorher === "einkaufen" && neu === "erfassen") {
         liste.querySelectorAll("li.erledigt").forEach(li => li.remove());
-        speichern();
+        speichern(true);
     }
 }
 
