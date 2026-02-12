@@ -222,6 +222,14 @@ button:disabled {
     color: #6b7280;
 }
 
+.sync-debug {
+    margin: 0 10px 8px;
+    text-align: center;
+    font-size: 11px;
+    color: #64748b;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 /* Einkaufsmodus: Eingabefeld ausblenden */
 body.modus-einkaufen .input-section {
     display: none !important;
@@ -429,6 +437,10 @@ nav button.active {
     }
 
     .sync-status {
+        margin: 0 8px 6px;
+    }
+
+    .sync-debug {
         margin: 0 8px 6px;
     }
 

@@ -24,6 +24,7 @@ const btnExport    = document.getElementById("btnExport");
 const modeBadge    = document.getElementById("mode-badge");
 const versionBadge = document.getElementById("version-badge");
 const syncStatus   = document.getElementById("sync-status");
+const syncDebug    = document.getElementById("sync-debug");
 
 const multiInput = document.getElementById("multi-line-input");
 const multiAdd   = document.getElementById("add-all-button");
@@ -58,6 +59,8 @@ let remoteSyncInFlight = false;
 let remoteSyncQueued = false;
 let supabaseReady = false;
 let supabaseUserId = "";
+let lastSyncAt = "";
+const debugEnabled = new URLSearchParams(location.search).get("debug") === "1";
 
 
 /* ======================
@@ -69,6 +72,29 @@ function setSyncStatus(text, tone = "offline") {
     syncStatus.textContent = text;
     syncStatus.classList.remove("ok", "warn", "offline");
     syncStatus.classList.add(tone);
+}
+
+function shortUserId(id) {
+    if (!id) return "-";
+    if (id.length <= 12) return id;
+    return id.slice(0, 8) + "..." + id.slice(-4);
+}
+
+function formatTimeIso(date) {
+    return date.toISOString().replace("T", " ").slice(0, 19) + "Z";
+}
+
+function updateSyncDebug() {
+    if (!syncDebug) return;
+    if (!debugEnabled) {
+        syncDebug.hidden = true;
+        return;
+    }
+
+    syncDebug.hidden = false;
+    const uid = shortUserId(supabaseUserId);
+    const syncText = lastSyncAt || "-";
+    syncDebug.textContent = `debug uid=${uid} lastSync=${syncText}`;
 }
 
 async function ensureSupabaseAuth() {
@@ -89,12 +115,14 @@ async function ensureSupabaseAuth() {
         supabaseUserId = user.id;
         supabaseReady = true;
         setSyncStatus("Sync: Verbunden", "ok");
+        updateSyncDebug();
         return true;
     } catch (err) {
         console.warn("Supabase Auth nicht verfuegbar:", err);
         supabaseReady = false;
         supabaseUserId = "";
         setSyncStatus("Sync: Offline (lokal)", "offline");
+        updateSyncDebug();
         return false;
     }
 }
@@ -203,10 +231,13 @@ async function syncRemoteIfNeeded() {
             const daten = datenAusListeLesen();
             await speichernRemote(daten);
         } while (remoteSyncQueued);
+        lastSyncAt = formatTimeIso(new Date());
         setSyncStatus("Sync: Verbunden", "ok");
+        updateSyncDebug();
     } catch (err) {
         console.warn("Remote-Sync fehlgeschlagen, lokal bleibt aktiv:", err);
         setSyncStatus("Sync: Offline (lokal)", "offline");
+        updateSyncDebug();
     } finally {
         remoteSyncInFlight = false;
     }
@@ -223,6 +254,7 @@ async function laden() {
 
     if (!supabaseClient) {
         setSyncStatus("Sync: Lokal", "offline");
+        updateSyncDebug();
         datenInListeSchreiben(lokaleDaten);
         return;
     }
@@ -233,15 +265,21 @@ async function laden() {
             datenInListeSchreiben(remoteDaten);
             speichernLokal(remoteDaten);
             setSyncStatus("Sync: Verbunden", "ok");
+            lastSyncAt = formatTimeIso(new Date());
+            updateSyncDebug();
             return;
         }
 
         datenInListeSchreiben(lokaleDaten);
         if (lokaleDaten.length > 0) void syncRemoteIfNeeded();
-        else setSyncStatus("Sync: Verbunden", "ok");
+        else {
+            setSyncStatus("Sync: Verbunden", "ok");
+            updateSyncDebug();
+        }
     } catch (err) {
         console.warn("Remote-Laden fehlgeschlagen, nutze lokale Daten:", err);
         setSyncStatus("Sync: Offline (lokal)", "offline");
+        updateSyncDebug();
         datenInListeSchreiben(lokaleDaten);
     }
 }
@@ -552,6 +590,7 @@ btnExport.onclick = async () => {
 laden();
 setModus("erfassen");
 if (versionBadge) versionBadge.textContent = "v" + APP_VERSION;
+updateSyncDebug();
 
 if (btnMic && !SpeechRecognitionCtor) {
     btnMic.disabled = true;
