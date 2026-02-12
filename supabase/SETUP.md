@@ -16,7 +16,7 @@
 ## 4) Verhalten
 - Wenn Supabase konfiguriert ist: Daten werden lokal gespeichert und zusaetzlich mit Supabase synchronisiert.
 - Wenn Supabase nicht erreichbar ist: App bleibt lokal nutzbar (Fallback auf `localStorage`).
-- Sync laeuft ueber einen geraeteuebergreifenden Code (`Geräte-Code` in der App).
+- Sync laeuft ueber einen 4-stelligen geraeteuebergreifenden Zahlencode (`Geräte-Code` in der App).
 - Auf beiden Handys denselben Code eintragen, dann teilen beide dieselbe Liste.
 
 ## 5) Hinweis

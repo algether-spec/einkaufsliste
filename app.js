@@ -45,6 +45,7 @@ const APP_CONFIG = window.APP_CONFIG || {};
 const STORAGE_KEY = "einkaufsliste";
 const SUPABASE_TABLE = "shopping_items";
 const SYNC_CODE_KEY = "einkaufsliste-sync-code";
+const SYNC_CODE_LENGTH = 4;
 const hasSupabaseConfig = Boolean(
     window.supabase && APP_CONFIG.supabaseUrl && APP_CONFIG.supabaseAnonKey
 );
@@ -88,13 +89,16 @@ function setAuthStatus(text) {
 
 function normalizeSyncCode(input) {
     return String(input || "")
-        .trim()
-        .toUpperCase()
-        .replace(/[^A-Z0-9_-]/g, "");
+        .replace(/\D/g, "")
+        .slice(0, SYNC_CODE_LENGTH);
+}
+
+function isValidSyncCode(code) {
+    return new RegExp("^\\d{" + SYNC_CODE_LENGTH + "}$").test(code);
 }
 
 function generateSyncCode() {
-    return "LISTE-" + Math.random().toString(36).slice(2, 8).toUpperCase();
+    return String(Math.floor(Math.random() * 10000)).padStart(SYNC_CODE_LENGTH, "0");
 }
 
 function getStoredSyncCode() {
@@ -107,8 +111,8 @@ function getStoredSyncCode() {
 
 function applySyncCode(code, shouldReload = true) {
     const normalized = normalizeSyncCode(code);
-    if (!normalized) {
-        setAuthStatus("Bitte gueltigen Code eingeben.");
+    if (!isValidSyncCode(normalized)) {
+        setAuthStatus("Bitte 4-stelligen Zahlencode eingeben.");
         return;
     }
 

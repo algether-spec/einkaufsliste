@@ -32,4 +32,4 @@ Setup siehe:
 
 Hinweis:
 - Supabase Sync nutzt anonyme Auth + RLS (jeder User nur eigene Daten).
-- Für Gerätekopplung in der App denselben `Geräte-Code` auf beiden Geräten setzen.
+- Für Gerätekopplung in der App denselben 4-stelligen `Geräte-Code` auf beiden Geräten setzen.
