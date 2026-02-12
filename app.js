@@ -43,7 +43,7 @@ const btnMic     = document.getElementById("mic-button");
 const micStatus  = document.getElementById("mic-status");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.22";
+const APP_VERSION = "1.0.23";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -584,10 +584,30 @@ function mehrzeilenSpeichern() {
 }
 
 multiAdd.onclick = mehrzeilenSpeichern;
+
+function clearInputBuffer(stopDictation = false) {
+    multiInput.value = "";
+    autoResize();
+
+    finalTranscript = "";
+    latestTranscript = "";
+    skipAutoSaveForCurrentBuffer = true;
+    ignoreResultsUntil = Date.now() + 700;
+
+    if (stopDictation && isListening && recognition) {
+        restartMicAfterManualCommit = false;
+        clearTimeout(micSessionTimer);
+        recognition.stop();
+        setMicStatus("Eingabe geloescht.");
+        return;
+    }
+
+    setMicStatus("Eingabe geloescht.");
+}
+
 if (btnClearInput) {
     btnClearInput.onclick = () => {
-        multiInput.value = "";
-        autoResize();
+        clearInputBuffer(true);
         multiInput.focus();
     };
 }
