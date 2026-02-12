@@ -34,6 +34,16 @@ let modus = "erfassen";
 const APP_VERSION = "1.0.12";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
+const APP_CONFIG = window.APP_CONFIG || {};
+const STORAGE_KEY = "einkaufsliste";
+const DEVICE_TOKEN_KEY = "einkaufsliste-device-token";
+const SUPABASE_TABLE = "shopping_items";
+const hasSupabaseConfig = Boolean(
+    window.supabase && APP_CONFIG.supabaseUrl && APP_CONFIG.supabaseAnonKey
+);
+const supabaseClient = hasSupabaseConfig
+    ? window.supabase.createClient(APP_CONFIG.supabaseUrl, APP_CONFIG.supabaseAnonKey)
+    : null;
 
 let recognition;
 let isListening = false;
@@ -44,35 +54,168 @@ const MIC_SESSION_MS = 30000;
 let skipAutoSaveForCurrentBuffer = false;
 let ignoreResultsUntil = 0;
 let restartMicAfterManualCommit = false;
+let remoteSyncInFlight = false;
+let remoteSyncQueued = false;
 
 
 /* ======================
    SPEICHERN & LADEN
 ====================== */
 
-function speichern() {
+function randomToken() {
+    if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+    return "tok-" + Date.now() + "-" + Math.random().toString(16).slice(2);
+}
+
+function getDeviceToken() {
+    try {
+        const existing = localStorage.getItem(DEVICE_TOKEN_KEY);
+        if (existing) return existing;
+        const created = randomToken();
+        localStorage.setItem(DEVICE_TOKEN_KEY, created);
+        return created;
+    } catch {
+        return "fallback-device-token";
+    }
+}
+
+const deviceToken = getDeviceToken();
+
+function datenAusListeLesen() {
     const daten = [];
 
-    liste.querySelectorAll("li").forEach(li => {
+    liste.querySelectorAll("li").forEach((li, index) => {
         daten.push({
             text: li.dataset.text,
-            erledigt: li.classList.contains("erledigt")
+            erledigt: li.classList.contains("erledigt"),
+            position: index
         });
     });
 
-    localStorage.setItem("einkaufsliste", JSON.stringify(daten));
+    return daten;
 }
 
-function laden() {
-    const raw = localStorage.getItem("einkaufsliste");
-    if (!raw) return;
+function datenInListeSchreiben(daten) {
+    liste.innerHTML = "";
+    daten.forEach(e => eintragAnlegen(e.text, e.erledigt));
+}
+
+function speichernLokal(daten) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(daten));
+}
+
+function ladenLokal() {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
 
     try {
-        JSON.parse(raw).forEach(e =>
-            eintragAnlegen(e.text, e.erledigt)
-        );
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        return parsed
+            .map((e, index) => ({
+                text: String(e.text || ""),
+                erledigt: Boolean(e.erledigt),
+                position: Number.isFinite(e.position) ? e.position : index
+            }))
+            .filter(e => e.text.trim().length > 0);
     } catch (err) {
-        console.warn("Fehler beim Laden:", err);
+        console.warn("Fehler beim lokalen Laden:", err);
+        return [];
+    }
+}
+
+async function ladenRemote() {
+    if (!supabaseClient) return null;
+
+    const { data, error } = await supabaseClient
+        .from(SUPABASE_TABLE)
+        .select("text, erledigt, position")
+        .eq("device_token", deviceToken)
+        .order("position", { ascending: true });
+
+    if (error) throw error;
+    if (!Array.isArray(data)) return [];
+
+    return data.map((e, index) => ({
+        text: String(e.text || ""),
+        erledigt: Boolean(e.erledigt),
+        position: Number.isFinite(e.position) ? e.position : index
+    }));
+}
+
+async function speichernRemote(daten) {
+    if (!supabaseClient) return;
+
+    const { error: deleteError } = await supabaseClient
+        .from(SUPABASE_TABLE)
+        .delete()
+        .eq("device_token", deviceToken);
+
+    if (deleteError) throw deleteError;
+    if (!daten.length) return;
+
+    const payload = daten.map((e, index) => ({
+        device_token: deviceToken,
+        text: e.text,
+        erledigt: e.erledigt,
+        position: index
+    }));
+
+    const { error: insertError } = await supabaseClient
+        .from(SUPABASE_TABLE)
+        .insert(payload);
+
+    if (insertError) throw insertError;
+}
+
+async function syncRemoteIfNeeded() {
+    if (!supabaseClient) return;
+    if (remoteSyncInFlight) {
+        remoteSyncQueued = true;
+        return;
+    }
+
+    remoteSyncInFlight = true;
+    try {
+        do {
+            remoteSyncQueued = false;
+            const daten = datenAusListeLesen();
+            await speichernRemote(daten);
+        } while (remoteSyncQueued);
+    } catch (err) {
+        console.warn("Remote-Sync fehlgeschlagen, lokal bleibt aktiv:", err);
+    } finally {
+        remoteSyncInFlight = false;
+    }
+}
+
+function speichern() {
+    const daten = datenAusListeLesen();
+    speichernLokal(daten);
+    void syncRemoteIfNeeded();
+}
+
+async function laden() {
+    const lokaleDaten = ladenLokal();
+
+    if (!supabaseClient) {
+        datenInListeSchreiben(lokaleDaten);
+        return;
+    }
+
+    try {
+        const remoteDaten = await ladenRemote();
+        if (remoteDaten && remoteDaten.length > 0) {
+            datenInListeSchreiben(remoteDaten);
+            speichernLokal(remoteDaten);
+            return;
+        }
+
+        datenInListeSchreiben(lokaleDaten);
+        if (lokaleDaten.length > 0) void syncRemoteIfNeeded();
+    } catch (err) {
+        console.warn("Remote-Laden fehlgeschlagen, nutze lokale Daten:", err);
+        datenInListeSchreiben(lokaleDaten);
     }
 }
 
