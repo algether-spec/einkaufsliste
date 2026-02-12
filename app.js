@@ -43,7 +43,7 @@ const btnMic     = document.getElementById("mic-button");
 const micStatus  = document.getElementById("mic-status");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.26";
+const APP_VERSION = "1.0.27";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -51,6 +51,16 @@ const STORAGE_KEY = "einkaufsliste";
 const SUPABASE_TABLE = "shopping_items";
 const SYNC_CODE_KEY = "einkaufsliste-sync-code";
 const SYNC_CODE_LENGTH = 4;
+const GROUP_RULES = [
+    { name: "obst_gemuese", patterns: ["apfel", "banane", "birne", "zitrone", "orange", "traube", "beere", "salat", "gurke", "tomate", "paprika", "zucchini", "kartoffel", "zwiebel", "knoblauch", "karotte", "mohrrube", "brokkoli", "blumenkohl", "pilz", "avocado"] },
+    { name: "backen", patterns: ["brot", "broetchen", "toast", "mehl", "hefe", "backpulver", "zucker", "vanille", "kuchen", "croissant"] },
+    { name: "milch_eier", patterns: ["milch", "joghurt", "quark", "kaese", "butter", "sahne", "ei", "frischkaese", "mozzarella", "parmesan"] },
+    { name: "fleisch_fisch", patterns: ["fleisch", "huhn", "haehnchen", "pute", "rind", "schwein", "hack", "wurst", "schinken", "salami", "speck", "fisch", "lachs", "thunfisch"] },
+    { name: "tiefkuehl", patterns: ["tk", "tiefkuehl", "pizza", "pommes", "eis", "gemuese mix", "beeren mix"] },
+    { name: "trockenwaren", patterns: ["nudel", "reis", "linsen", "bohnen", "konserve", "dose", "tomatenmark", "sauce", "bruehe", "muessli", "haferflocken"] },
+    { name: "getraenke", patterns: ["wasser", "saft", "cola", "fanta", "sprite", "bier", "wein", "kaffee", "tee"] },
+    { name: "drogerie", patterns: ["toilettenpapier", "kuechenrolle", "spuelmittel", "waschmittel", "seife", "shampoo", "zahnpasta", "deo", "muellbeutel"] }
+];
 const hasSupabaseCredentials = Boolean(
     APP_CONFIG.supabaseUrl && APP_CONFIG.supabaseAnonKey
 );
@@ -200,6 +210,49 @@ function listDataSignature(daten) {
             erledigt: e.erledigt
         }))
     );
+}
+
+function normalizeForGroupMatch(text) {
+    return String(text || "")
+        .toLowerCase()
+        .replace(/ä/g, "ae")
+        .replace(/ö/g, "oe")
+        .replace(/ü/g, "ue")
+        .replace(/ß/g, "ss");
+}
+
+function getGroupIndex(text) {
+    const normalized = normalizeForGroupMatch(text);
+    for (let i = 0; i < GROUP_RULES.length; i += 1) {
+        const rule = GROUP_RULES[i];
+        if (rule.patterns.some(pattern => normalized.includes(pattern))) return i;
+    }
+    return GROUP_RULES.length;
+}
+
+function sortListByStoreGroups() {
+    const daten = normalizeListData(datenAusListeLesen());
+    if (!daten.length) return false;
+
+    const offene = daten.filter(e => !e.erledigt);
+    const erledigte = daten.filter(e => e.erledigt);
+    const collator = new Intl.Collator("de", { sensitivity: "base" });
+
+    offene.sort((a, b) => {
+        const groupDiff = getGroupIndex(a.text) - getGroupIndex(b.text);
+        if (groupDiff !== 0) return groupDiff;
+        return collator.compare(a.text, b.text);
+    });
+
+    const sortierte = [...offene, ...erledigte].map((e, index) => ({
+        text: e.text,
+        erledigt: e.erledigt,
+        position: index
+    }));
+
+    datenInListeSchreiben(sortierte);
+    speichernLokal(sortierte);
+    return true;
 }
 
 function mergeListConflict(localDaten, remoteDaten) {
@@ -813,6 +866,10 @@ function setModus(neu) {
         const showAuthBar = modus === "erfassen" && syncEditMode;
         authBar.hidden = !showAuthBar;
         authBar.classList.toggle("is-hidden", !showAuthBar);
+    }
+
+    if (vorher !== "einkaufen" && neu === "einkaufen") {
+        if (sortListByStoreGroups()) speichern();
     }
 
     if (vorher === "einkaufen" && neu === "erfassen") {
