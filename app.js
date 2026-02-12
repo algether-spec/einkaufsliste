@@ -24,6 +24,7 @@ const btnExport    = document.getElementById("btnExport");
 const btnForceUpdate = document.getElementById("btn-force-update");
 const syncCodeCompact = document.getElementById("sync-code-compact");
 const btnSyncCodeDisplay = document.getElementById("btn-sync-code-display");
+const btnSyncCodeEdit = document.getElementById("btn-sync-code-edit");
 const modeBadge    = document.getElementById("mode-badge");
 const versionBadge = document.getElementById("version-badge");
 const syncStatus   = document.getElementById("sync-status");
@@ -41,7 +42,7 @@ const btnMic     = document.getElementById("mic-button");
 const micStatus  = document.getElementById("mic-status");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.17";
+const APP_VERSION = "1.0.18";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -75,6 +76,7 @@ let supabaseUserId = "";
 let lastSyncAt = "";
 const debugEnabled = new URLSearchParams(location.search).get("debug") === "1";
 let currentSyncCode = "";
+let syncEditMode = false;
 
 
 /* ======================
@@ -127,24 +129,27 @@ function applySyncCode(code, shouldReload = true) {
     if (syncCodeInput) syncCodeInput.value = currentSyncCode;
     if (btnSyncCodeDisplay) btnSyncCodeDisplay.textContent = currentSyncCode;
     setAuthStatus(`Geraete-Code: ${currentSyncCode}`);
+    setSyncEditMode(false);
     updateSyncDebug();
     if (shouldReload) void laden();
 }
 
-function showCodePrompt() {
-    const entered = window.prompt("4-stelligen Geraete-Code eingeben", currentSyncCode || "");
-    if (entered == null) return;
-    applySyncCode(entered);
+function setSyncEditMode(enabled) {
+    syncEditMode = Boolean(enabled);
+    if (authBar) authBar.hidden = !syncEditMode || modus !== "erfassen";
+    if (syncCodeCompact) syncCodeCompact.hidden = modus !== "erfassen";
+    if (syncCodeInput && syncEditMode && modus === "erfassen") {
+        syncCodeInput.focus();
+        syncCodeInput.select();
+    }
 }
 
 function setupSyncCodeUi() {
     if (!authBar) return;
 
     applySyncCode(getStoredSyncCode(), false);
-
-    authBar.hidden = true;
     if (syncStatus) syncStatus.hidden = true;
-    if (syncCodeCompact) syncCodeCompact.hidden = false;
+    setSyncEditMode(false);
 
     if (!hasSupabaseCredentials) {
         setAuthStatus("Supabase nicht konfiguriert. App laeuft nur lokal.");
@@ -160,8 +165,12 @@ function setupSyncCodeUi() {
         btnSyncNew.onclick = () => applySyncCode(generateSyncCode());
     }
 
+    if (btnSyncCodeEdit) {
+        btnSyncCodeEdit.onclick = () => setSyncEditMode(!syncEditMode);
+    }
+
     if (btnSyncCodeDisplay) {
-        btnSyncCodeDisplay.onclick = showCodePrompt;
+        btnSyncCodeDisplay.onclick = () => setSyncEditMode(true);
     }
 }
 
@@ -756,6 +765,7 @@ function setModus(neu) {
     if (modeBadge) modeBadge.textContent = modus === "einkaufen" ? "Einkaufen" : "Erfassen";
     document.body.classList.toggle("modus-einkaufen", modus === "einkaufen");
     if (syncCodeCompact) syncCodeCompact.hidden = modus !== "erfassen";
+    if (authBar) authBar.hidden = modus !== "erfassen" || !syncEditMode;
 
     if (vorher === "einkaufen" && neu === "erfassen") {
         liste.querySelectorAll("li.erledigt").forEach(li => li.remove());
