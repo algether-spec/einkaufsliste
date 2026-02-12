@@ -43,7 +43,7 @@ const btnMic     = document.getElementById("mic-button");
 const micStatus  = document.getElementById("mic-status");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.23";
+const APP_VERSION = "1.0.24";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -602,12 +602,16 @@ function clearInputBuffer(stopDictation = false) {
         return;
     }
 
-    setMicStatus("Eingabe geloescht.");
+    if (isListening) {
+        setMicStatus("Eingabe geloescht. Bitte weiter sprechen...");
+    } else {
+        setMicStatus("Eingabe geloescht.");
+    }
 }
 
 if (btnClearInput) {
     btnClearInput.onclick = () => {
-        clearInputBuffer(true);
+        clearInputBuffer(false);
         multiInput.focus();
     };
 }
