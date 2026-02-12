@@ -39,7 +39,7 @@ const btnMic     = document.getElementById("mic-button");
 const micStatus  = document.getElementById("mic-status");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.15";
+const APP_VERSION = "1.0.16";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -158,8 +158,17 @@ function formatTimeIso(date) {
     return date.toISOString().replace("T", " ").slice(0, 19) + "Z";
 }
 
+function formatSupabaseError(err) {
+    const code = String(err?.code || "").trim();
+    const message = String(err?.message || "").trim();
+    const details = String(err?.details || "").trim();
+    const hint = String(err?.hint || "").trim();
+    return [code, message, details, hint].filter(Boolean).join(" | ");
+}
+
 function getSyncErrorHint(err) {
-    const message = String(err?.message || err?.details || "").toLowerCase();
+    const raw = formatSupabaseError(err);
+    const message = raw.toLowerCase();
     if (!message) return "Bitte Verbindung und Supabase-Einstellungen pruefen.";
     if (message.includes("permission denied") || message.includes("not allowed")) {
         return "Supabase Rechte fehlen (schema.sql erneut ausfuehren).";
@@ -170,7 +179,7 @@ function getSyncErrorHint(err) {
     if (message.includes("failed to fetch") || message.includes("network")) {
         return "Netzwerkfehler. Internetverbindung pruefen.";
     }
-    return "Sync-Fehler. Bitte spaeter erneut versuchen.";
+    return "Sync-Fehler: " + raw.slice(0, 120);
 }
 
 async function forceAppUpdate() {
@@ -358,7 +367,7 @@ async function syncRemoteIfNeeded() {
         setSyncStatus("Sync: Verbunden", "ok");
         updateSyncDebug();
     } catch (err) {
-        console.warn("Remote-Sync fehlgeschlagen, lokal bleibt aktiv:", err);
+        console.warn("Remote-Sync fehlgeschlagen, lokal bleibt aktiv:", err, formatSupabaseError(err));
         setSyncStatus("Sync: Offline (lokal)", "offline");
         setAuthStatus(getSyncErrorHint(err));
         updateSyncDebug();
@@ -401,7 +410,7 @@ async function laden() {
             updateSyncDebug();
         }
     } catch (err) {
-        console.warn("Remote-Laden fehlgeschlagen, nutze lokale Daten:", err);
+        console.warn("Remote-Laden fehlgeschlagen, nutze lokale Daten:", err, formatSupabaseError(err));
         setSyncStatus("Sync: Offline (lokal)", "offline");
         setAuthStatus(getSyncErrorHint(err));
         updateSyncDebug();
