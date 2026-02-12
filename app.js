@@ -42,7 +42,7 @@ const btnMic     = document.getElementById("mic-button");
 const micStatus  = document.getElementById("mic-status");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.19";
+const APP_VERSION = "1.0.20";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -130,6 +130,7 @@ function applySyncCode(code, shouldReload = true) {
     if (btnSyncCodeDisplay) btnSyncCodeDisplay.textContent = currentSyncCode;
     setAuthStatus(`Geraete-Code: ${currentSyncCode}`);
     setSyncEditMode(false);
+    if (syncCodeInput) syncCodeInput.blur();
     updateSyncDebug();
     if (shouldReload) void laden();
 }

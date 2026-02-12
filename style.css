@@ -24,6 +24,7 @@ body {
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+    position: relative;
     background: var(--bg);
     border-radius: 20px;
     border: 1px solid #e5e7eb;
@@ -46,13 +47,19 @@ header {
 
 .auth-bar {
     background: #ffffff;
-    margin: 8px 10px 0;
+    margin: 0;
     padding: 8px;
     border-radius: 12px;
     display: grid;
     grid-template-columns: 1fr auto auto;
     gap: 8px;
     align-items: center;
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    top: 106px;
+    z-index: 40;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.18);
 }
 
 .auth-bar.is-hidden {
@@ -65,7 +72,7 @@ header {
     padding: 10px 12px;
     border-radius: 10px;
     border: 1px solid #d1d5db;
-    font-size: 14px;
+    font-size: 16px;
 }
 
 .auth-button {
@@ -538,7 +545,9 @@ nav button.active {
     }
 
     .auth-bar {
-        margin: 6px 8px 0;
+        left: 8px;
+        right: 8px;
+        top: 98px;
         padding: 6px;
     }
 
