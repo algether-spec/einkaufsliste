@@ -43,7 +43,7 @@ const btnMic     = document.getElementById("mic-button");
 const micStatus  = document.getElementById("mic-status");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.27";
+const APP_VERSION = "1.0.28";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -89,6 +89,11 @@ let lastSyncAt = "";
 const debugEnabled = new URLSearchParams(location.search).get("debug") === "1";
 let currentSyncCode = "";
 let syncEditMode = false;
+
+if (authBar) {
+    authBar.hidden = true;
+    authBar.classList.add("is-hidden");
+}
 
 
 /* ======================
