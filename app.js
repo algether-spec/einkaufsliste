@@ -38,7 +38,7 @@ const btnMic     = document.getElementById("mic-button");
 const micStatus  = document.getElementById("mic-status");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.12";
+const APP_VERSION = "1.0.14";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -46,10 +46,13 @@ const STORAGE_KEY = "einkaufsliste";
 const SUPABASE_TABLE = "shopping_items";
 const SYNC_CODE_KEY = "einkaufsliste-sync-code";
 const SYNC_CODE_LENGTH = 4;
-const hasSupabaseConfig = Boolean(
-    window.supabase && APP_CONFIG.supabaseUrl && APP_CONFIG.supabaseAnonKey
+const hasSupabaseCredentials = Boolean(
+    APP_CONFIG.supabaseUrl && APP_CONFIG.supabaseAnonKey
 );
-const supabaseClient = hasSupabaseConfig
+const hasSupabaseLibrary = Boolean(
+    window.supabase && typeof window.supabase.createClient === "function"
+);
+const supabaseClient = hasSupabaseCredentials && hasSupabaseLibrary
     ? window.supabase.createClient(APP_CONFIG.supabaseUrl, APP_CONFIG.supabaseAnonKey)
     : null;
 
@@ -129,6 +132,12 @@ function setupSyncCodeUi() {
 
     applySyncCode(getStoredSyncCode(), false);
 
+    if (!hasSupabaseCredentials) {
+        setAuthStatus("Supabase nicht konfiguriert. App laeuft nur lokal.");
+    } else if (!hasSupabaseLibrary) {
+        setAuthStatus("Supabase nicht geladen. Internet pruefen und neu laden.");
+    }
+
     if (btnSyncApply) {
         btnSyncApply.onclick = () => applySyncCode(syncCodeInput?.value || "");
     }
@@ -146,6 +155,21 @@ function shortUserId(id) {
 
 function formatTimeIso(date) {
     return date.toISOString().replace("T", " ").slice(0, 19) + "Z";
+}
+
+function getSyncErrorHint(err) {
+    const message = String(err?.message || err?.details || "").toLowerCase();
+    if (!message) return "Bitte Verbindung und Supabase-Einstellungen pruefen.";
+    if (message.includes("permission denied") || message.includes("not allowed")) {
+        return "Supabase Rechte fehlen (schema.sql erneut ausfuehren).";
+    }
+    if (message.includes("jwt") || message.includes("auth")) {
+        return "Anmeldung fehlgeschlagen. Bitte Seite neu laden.";
+    }
+    if (message.includes("failed to fetch") || message.includes("network")) {
+        return "Netzwerkfehler. Internetverbindung pruefen.";
+    }
+    return "Sync-Fehler. Bitte spaeter erneut versuchen.";
 }
 
 function updateSyncDebug() {
@@ -302,6 +326,7 @@ async function syncRemoteIfNeeded() {
     } catch (err) {
         console.warn("Remote-Sync fehlgeschlagen, lokal bleibt aktiv:", err);
         setSyncStatus("Sync: Offline (lokal)", "offline");
+        setAuthStatus(getSyncErrorHint(err));
         updateSyncDebug();
     } finally {
         remoteSyncInFlight = false;
@@ -344,6 +369,7 @@ async function laden() {
     } catch (err) {
         console.warn("Remote-Laden fehlgeschlagen, nutze lokale Daten:", err);
         setSyncStatus("Sync: Offline (lokal)", "offline");
+        setAuthStatus(getSyncErrorHint(err));
         updateSyncDebug();
         datenInListeSchreiben(lokaleDaten);
     }
@@ -666,6 +692,8 @@ setupSyncCodeUi();
 
 if (supabaseClient) {
     void laden();
-} else if (authBar) {
-    authBar.hidden = true;
+} else {
+    setSyncStatus("Sync: Lokal", "offline");
+    updateSyncDebug();
+    datenInListeSchreiben(ladenLokal());
 }

@@ -29,6 +29,10 @@ create trigger trg_shopping_items_updated_at
 before update on public.shopping_items
 for each row execute function public.set_updated_at();
 
+grant usage on schema public to anon, authenticated;
+grant select, insert, update, delete on public.shopping_items to anon, authenticated;
+grant usage, select on sequence public.shopping_items_id_seq to anon, authenticated;
+
 alter table public.shopping_items enable row level security;
 
 drop policy if exists "shopping_items_select_by_code" on public.shopping_items;

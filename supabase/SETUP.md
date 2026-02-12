@@ -22,3 +22,8 @@
 ## 5) Hinweis
 - Die Tabelle ist mit Row Level Security (RLS) geschuetzt.
 - Zugriff wird fuer diese Version ueber den Sync-Code gesteuert.
+
+## 6) Fehlerbild: "erst Verbunden, dann Offline (lokal)"
+- Ursache ist meist fehlende DB-Berechtigung fuer `anon`/`authenticated` (insb. Sequence bei Insert).
+- Loesung: `supabase/schema.sql` im SQL Editor erneut komplett ausfuehren.
+- Danach App auf beiden Geraeten neu laden und erneut mit gleichem 4-stelligen Code verbinden.
