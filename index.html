@@ -44,6 +44,17 @@
         <span class="badge-free" id="mode-badge">Erfassen</span>
     </header>
 
+    <div class="auth-bar" id="auth-bar">
+        <input
+            type="email"
+            id="auth-email"
+            class="auth-email"
+            placeholder="E-Mail für Geräte-Sync">
+        <button type="button" id="btn-auth-link" class="auth-button">Link senden</button>
+        <button type="button" id="btn-auth-logout" class="auth-button auth-logout" hidden>Abmelden</button>
+        <div id="auth-status" class="auth-status"></div>
+    </div>
+
     <main>
 
         <!-- MEHRZEILEN-EINGABE -->

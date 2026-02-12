@@ -25,6 +25,11 @@ const modeBadge    = document.getElementById("mode-badge");
 const versionBadge = document.getElementById("version-badge");
 const syncStatus   = document.getElementById("sync-status");
 const syncDebug    = document.getElementById("sync-debug");
+const authBar      = document.getElementById("auth-bar");
+const authEmail    = document.getElementById("auth-email");
+const btnAuthLink  = document.getElementById("btn-auth-link");
+const btnAuthLogout = document.getElementById("btn-auth-logout");
+const authStatus   = document.getElementById("auth-status");
 
 const multiInput = document.getElementById("multi-line-input");
 const multiAdd   = document.getElementById("add-all-button");
@@ -74,6 +79,92 @@ function setSyncStatus(text, tone = "offline") {
     syncStatus.classList.add(tone);
 }
 
+function setAuthStatus(text) {
+    if (!authStatus) return;
+    authStatus.textContent = text;
+}
+
+function updateAuthUi(user) {
+    if (!supabaseClient || !authBar) return;
+    if (!user) {
+        if (btnAuthLogout) btnAuthLogout.hidden = true;
+        setAuthStatus("Gastmodus aktiv. Für Geräte-Sync mit E-Mail anmelden.");
+        return;
+    }
+
+    const email = user.email || "";
+    const isAnonymous = Boolean(user.is_anonymous);
+    if (btnAuthLogout) btnAuthLogout.hidden = false;
+    if (authEmail) authEmail.value = email;
+
+    if (isAnonymous) setAuthStatus("Gastmodus aktiv.");
+    else setAuthStatus(`Angemeldet: ${email}`);
+}
+
+async function sendMagicLink() {
+    if (!supabaseClient || !authEmail) return;
+    const email = authEmail.value.trim();
+    if (!email) {
+        setAuthStatus("Bitte E-Mail eingeben.");
+        return;
+    }
+
+    setAuthStatus("Sende Link...");
+    const { error } = await supabaseClient.auth.signInWithOtp({
+        email,
+        options: {
+            emailRedirectTo: location.origin + location.pathname
+        }
+    });
+
+    if (error) {
+        setAuthStatus("Link fehlgeschlagen: " + error.message);
+        return;
+    }
+    setAuthStatus("Link gesendet. Mail öffnen und bestätigen.");
+}
+
+async function logoutAuth() {
+    if (!supabaseClient) return;
+    const { error } = await supabaseClient.auth.signOut();
+    if (error) {
+        setAuthStatus("Abmelden fehlgeschlagen: " + error.message);
+        return;
+    }
+    supabaseReady = false;
+    supabaseUserId = "";
+    updateAuthUi(null);
+    await laden();
+}
+
+function getSessionUser(sessionData) {
+    return sessionData?.data?.session?.user || null;
+}
+
+async function setupAuthUi() {
+    if (!supabaseClient || !authBar) return;
+
+    if (btnAuthLink) btnAuthLink.onclick = () => void sendMagicLink();
+    if (btnAuthLogout) btnAuthLogout.onclick = () => void logoutAuth();
+
+    const session = await supabaseClient.auth.getSession();
+    updateAuthUi(getSessionUser(session));
+
+    supabaseClient.auth.onAuthStateChange((_event, sessionData) => {
+        const user = sessionData?.user || sessionData?.session?.user || null;
+        if (user?.id) {
+            supabaseUserId = user.id;
+            supabaseReady = true;
+        } else {
+            supabaseUserId = "";
+            supabaseReady = false;
+        }
+        updateAuthUi(user);
+        updateSyncDebug();
+        void laden();
+    });
+}
+
 function shortUserId(id) {
     if (!id) return "-";
     if (id.length <= 12) return id;
@@ -104,7 +195,7 @@ async function ensureSupabaseAuth() {
     try {
         setSyncStatus("Sync: Verbinde...", "warn");
         const sessionResult = await supabaseClient.auth.getSession();
-        let user = sessionResult?.data?.session?.user || null;
+        let user = getSessionUser(sessionResult);
 
         if (!user) {
             const anonResult = await supabaseClient.auth.signInAnonymously();
@@ -114,6 +205,7 @@ async function ensureSupabaseAuth() {
         if (!user?.id) return false;
         supabaseUserId = user.id;
         supabaseReady = true;
+        updateAuthUi(user);
         setSyncStatus("Sync: Verbunden", "ok");
         updateSyncDebug();
         return true;
@@ -596,4 +688,10 @@ if (btnMic && !SpeechRecognitionCtor) {
     btnMic.disabled = true;
     btnMic.title = "Spracherkennung wird hier nicht unterstuetzt";
     setMicStatus("Spracherkennung wird in diesem Browser nicht unterstuetzt.");
+}
+
+if (supabaseClient) {
+    void setupAuthUi();
+} else if (authBar) {
+    authBar.hidden = true;
 }
