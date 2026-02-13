@@ -211,7 +211,7 @@ button:disabled {
 
 .input-actions {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr 2fr 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
     align-items: stretch;
 }
@@ -224,27 +224,27 @@ button:disabled {
 .add-button {
     background: var(--primary);
     color: white;
-    font-size: 16px;
+    font-size: 15px;
 }
 
 .clear-input-button {
     background: #fee2e2;
     color: #b91c1c;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 700;
 }
 
 .photo-button {
     background: #e0f2fe;
     color: #075985;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 700;
 }
 
 .export-button {
     background: linear-gradient(135deg, #0f172a, #334155);
     color: #f8fafc;
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 700;
     letter-spacing: 0.01em;
 }
@@ -252,7 +252,7 @@ button:disabled {
 .mic-button {
     background: #dbeafe;
     color: #1e40af;
-    font-size: 18px;
+    font-size: 17px;
 }
 
 .mic-button.listening {
@@ -268,8 +268,8 @@ button:disabled {
 .add-button,
 .export-button {
     width: 100%;
-    min-height: 44px;
-    padding: 10px;
+    min-height: 40px;
+    padding: 8px;
     border: none;
     border-radius: 12px;
     display: flex;
@@ -282,15 +282,8 @@ button:disabled {
     display: none;
 }
 
-.mic-button,
-.photo-button,
-.clear-input-button,
-.export-button {
-    grid-column: span 1;
-}
-
 .add-button {
-    grid-column: span 1;
+    grid-column: span 2;
 }
 
 .mic-status {
