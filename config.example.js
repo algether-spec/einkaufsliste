@@ -1,8 +1,5 @@
 window.APP_CONFIG = {
   supabaseUrl: "https://YOUR-PROJECT.supabase.co",
-  supabaseAnonKey: "YOUR-ANON-KEY",
-  // Optional for Foto KI:
-  // openaiApiKey: "sk-...",
-  // openaiModel: "gpt-4.1-mini"
+  supabaseAnonKey: "YOUR-ANON-KEY"
 };
 // Anonymous auth must be enabled in Supabase Authentication settings.

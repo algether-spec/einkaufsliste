@@ -43,19 +43,20 @@ const btnClearInput = document.getElementById("btn-clear-input");
 const btnNewLine = document.getElementById("newline-button");
 const btnMic     = document.getElementById("mic-button");
 const micStatus  = document.getElementById("mic-status");
+const imageViewer = document.getElementById("image-viewer");
+const imageViewerImg = document.getElementById("image-viewer-img");
+const btnImageViewerClose = document.getElementById("btn-image-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.31";
+const APP_VERSION = "1.0.32";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
 const STORAGE_KEY = "einkaufsliste";
 const SUPABASE_TABLE = "shopping_items";
 const SYNC_CODE_KEY = "einkaufsliste-sync-code";
-const OPENAI_KEY_STORAGE = "einkaufsliste-openai-key";
+const IMAGE_ENTRY_PREFIX = "__IMG__:";
 const SYNC_CODE_LENGTH = 4;
-const OPENAI_API_URL = "https://api.openai.com/v1/responses";
-const OPENAI_MODEL = APP_CONFIG.openaiModel || "gpt-4.1-mini";
 const GROUP_RULES = [
     { name: "obst_gemuese", patterns: ["apfel", "banane", "birne", "zitrone", "orange", "traube", "beere", "salat", "gurke", "tomate", "paprika", "zucchini", "kartoffel", "zwiebel", "knoblauch", "karotte", "mohrrube", "brokkoli", "blumenkohl", "pilz", "avocado"] },
     { name: "backen", patterns: ["brot", "broetchen", "toast", "mehl", "hefe", "backpulver", "zucker", "vanille", "kuchen", "croissant"] },
@@ -65,12 +66,6 @@ const GROUP_RULES = [
     { name: "trockenwaren", patterns: ["nudel", "reis", "linsen", "bohnen", "konserve", "dose", "tomatenmark", "sauce", "bruehe", "muessli", "haferflocken"] },
     { name: "getraenke", patterns: ["wasser", "saft", "cola", "fanta", "sprite", "bier", "wein", "kaffee", "tee"] },
     { name: "drogerie", patterns: ["toilettenpapier", "kuechenrolle", "spuelmittel", "waschmittel", "seife", "shampoo", "zahnpasta", "deo", "muellbeutel"] }
-];
-const OCR_STOPWORDS = [
-    "zubereitung", "rezept", "anleitung", "schritt", "ofen", "backofen",
-    "minuten", "minute", "sekunden", "grad", "portion", "portionen",
-    "hinweis", "mischen", "ruehren", "verruehren", "kochen", "backen",
-    "servieren", "zutatenliste"
 ];
 const hasSupabaseCredentials = Boolean(
     APP_CONFIG.supabaseUrl && APP_CONFIG.supabaseAnonKey
@@ -238,6 +233,7 @@ function normalizeForGroupMatch(text) {
 }
 
 function getGroupIndex(text) {
+    if (String(text || "").startsWith(IMAGE_ENTRY_PREFIX)) return GROUP_RULES.length + 1;
     const normalized = normalizeForGroupMatch(text);
     for (let i = 0; i < GROUP_RULES.length; i += 1) {
         const rule = GROUP_RULES[i];
@@ -410,7 +406,7 @@ function datenAusListeLesen() {
 
     liste.querySelectorAll("li").forEach((li, index) => {
         daten.push({
-            text: li.dataset.text,
+            text: li.dataset.rawText || li.dataset.text || "",
             erledigt: li.classList.contains("erledigt"),
             position: index
         });
@@ -592,8 +588,40 @@ async function laden() {
 
 function eintragAnlegen(text, erledigt = false) {
     const li = document.createElement("li");
-    li.dataset.text = text;
-    li.textContent = text;
+    const rawText = String(text || "");
+    li.dataset.rawText = rawText;
+    li.dataset.text = rawText;
+
+    if (rawText.startsWith(IMAGE_ENTRY_PREFIX)) {
+        const imageSrc = rawText.slice(IMAGE_ENTRY_PREFIX.length);
+        const wrapper = document.createElement("div");
+        wrapper.className = "list-photo-item";
+
+        const thumb = document.createElement("img");
+        thumb.className = "list-photo-thumb";
+        thumb.src = imageSrc;
+        thumb.alt = "Fotoeintrag";
+
+        const openBtn = document.createElement("button");
+        openBtn.type = "button";
+        openBtn.className = "list-photo-open";
+        openBtn.textContent = "Foto öffnen";
+        openBtn.onclick = event => {
+            event.stopPropagation();
+            openImageViewer(imageSrc);
+        };
+
+        thumb.onclick = event => {
+            event.stopPropagation();
+            openImageViewer(imageSrc);
+        };
+
+        wrapper.appendChild(thumb);
+        wrapper.appendChild(openBtn);
+        li.appendChild(wrapper);
+    } else {
+        li.textContent = rawText;
+    }
 
     if (erledigt) li.classList.add("erledigt");
 
@@ -678,80 +706,35 @@ function clearInputBuffer(stopDictation = false) {
     }
 }
 
-function toAsciiLower(text) {
-    return String(text || "")
-        .toLowerCase()
-        .replace(/ä/g, "ae")
-        .replace(/ö/g, "oe")
-        .replace(/ü/g, "ue")
-        .replace(/ß/g, "ss");
+function openImageViewer(src) {
+    if (!imageViewer || !imageViewerImg) return;
+    imageViewerImg.src = src;
+    imageViewer.hidden = false;
 }
 
-function hasVowel(token) {
-    return /[aeiouy]/.test(toAsciiLower(token));
+function closeImageViewer() {
+    if (!imageViewer || !imageViewerImg) return;
+    imageViewer.hidden = true;
+    imageViewerImg.src = "";
 }
 
-function isLikelyProductToken(token) {
-    const cleaned = toAsciiLower(token).replace(/[^a-z]/g, "");
-    return cleaned.length >= 2 && cleaned.length <= 20 && hasVowel(cleaned);
-}
+async function addPhotoAsListItem(file) {
+    if (!file) return;
+    if (btnPhotoOcr) btnPhotoOcr.disabled = true;
+    setMicStatus("Foto wird eingefuegt...");
 
-function cleanupOcrCandidate(line) {
-    return String(line || "")
-        .replace(/[(){}\[\]]/g, " ")
-        .replace(/^[-•*]\s*/, "")
-        .replace(/^\d+[.,]?\d*\s*(kg|g|mg|l|ml|el|tl|stk|stueck|packung|becher|prise|bund)\b/i, "")
-        .replace(/\b\d+[.,]?\d*\s*(kg|g|mg|l|ml|el|tl|stk|stueck|packung|becher|prise|bund)\b/gi, "")
-        .replace(/\s+/g, " ")
-        .trim();
-}
-
-function looksLikeShoppingItem(line) {
-    const raw = String(line || "").trim();
-    if (!raw) return false;
-
-    const normalized = toAsciiLower(raw);
-    if (OCR_STOPWORDS.some(word => normalized.includes(word))) return false;
-    if (raw.length < 2 || raw.length > 36) return false;
-    if ((raw.match(/\d/g) || []).length > 2) return false;
-    if (/[@#$%^&*_=+<>\\|]/.test(raw)) return false;
-
-    const tokens = raw
-        .split(/\s+/)
-        .map(t => t.replace(/[^A-Za-zÄÖÜäöüß]/g, ""))
-        .filter(Boolean);
-
-    if (!tokens.length || tokens.length > 4) return false;
-    if (!tokens.some(isLikelyProductToken)) return false;
-    if (tokens.some(t => !isLikelyProductToken(t))) return false;
-
-    const hasKnownKeyword = GROUP_RULES.some(rule =>
-        rule.patterns.some(pattern => normalized.includes(pattern))
-    );
-    if (hasKnownKeyword) return true;
-
-    // Fallback: allow short natural-looking product phrases.
-    return tokens.length <= 2 && tokens.join("").length >= 4;
-}
-
-function cleanOcrText(rawText) {
-    const candidates = String(rawText || "")
-        .split(/[\n,;]+/)
-        .map(cleanupOcrCandidate)
-        .filter(Boolean);
-
-    const unique = [];
-    const seen = new Set();
-
-    for (const candidate of candidates) {
-        if (!looksLikeShoppingItem(candidate)) continue;
-        const key = toAsciiLower(candidate);
-        if (seen.has(key)) continue;
-        seen.add(key);
-        unique.push(candidate);
+    try {
+        const imageSrc = await readFileAsDataUrl(file);
+        eintragAnlegen(IMAGE_ENTRY_PREFIX + imageSrc);
+        speichern();
+        setMicStatus("Foto zur Liste hinzugefuegt.");
+    } catch (err) {
+        console.warn("Foto konnte nicht hinzugefuegt werden:", err);
+        setMicStatus("Foto konnte nicht gelesen werden.");
+    } finally {
+        if (btnPhotoOcr) btnPhotoOcr.disabled = false;
+        if (photoOcrInput) photoOcrInput.value = "";
     }
-
-    return unique.join("\n");
 }
 
 function readFileAsDataUrl(file) {
@@ -761,178 +744,6 @@ function readFileAsDataUrl(file) {
         reader.onerror = () => reject(new Error("Datei konnte nicht gelesen werden."));
         reader.readAsDataURL(file);
     });
-}
-
-function getAiKey() {
-    const fromConfig = String(APP_CONFIG.openaiApiKey || "").trim();
-    if (fromConfig) return fromConfig;
-    return String(localStorage.getItem(OPENAI_KEY_STORAGE) || "").trim();
-}
-
-function ensureAiKey() {
-    const existing = getAiKey();
-    if (existing) return existing;
-
-    const entered = window.prompt("OpenAI API Key eingeben (wird nur lokal im Browser gespeichert):", "");
-    const trimmed = String(entered || "").trim();
-    if (!trimmed) return "";
-    localStorage.setItem(OPENAI_KEY_STORAGE, trimmed);
-    return trimmed;
-}
-
-function extractResponseText(payload) {
-    if (!payload || typeof payload !== "object") return "";
-    if (typeof payload.output_text === "string" && payload.output_text.trim()) return payload.output_text.trim();
-    const chunks = [];
-    const output = Array.isArray(payload.output) ? payload.output : [];
-    for (const item of output) {
-        const content = Array.isArray(item?.content) ? item.content : [];
-        for (const part of content) {
-            if (typeof part?.text === "string") chunks.push(part.text);
-        }
-    }
-    return chunks.join("\n").trim();
-}
-
-function parseAiItems(rawText) {
-    const text = String(rawText || "").trim();
-    if (!text) return [];
-
-    const match = text.match(/\[[\s\S]*\]/);
-    const jsonCandidate = match ? match[0] : text;
-
-    try {
-        const parsed = JSON.parse(jsonCandidate);
-        if (Array.isArray(parsed)) {
-            return parsed
-                .map(item => String(item || "").trim())
-                .filter(Boolean);
-        }
-    } catch {}
-
-    return text
-        .split(/\n+/)
-        .map(line => line.replace(/^[-•*]\s*/, "").trim())
-        .filter(Boolean);
-}
-
-async function runPhotoAi(file) {
-    if (!file) return false;
-    const apiKey = ensureAiKey();
-    if (!apiKey) {
-        setMicStatus("Kein KI-Key gesetzt. Nutze OCR.");
-        return false;
-    }
-
-    if (btnPhotoOcr) btnPhotoOcr.disabled = true;
-    setMicStatus("Foto wird per KI ausgewertet...");
-
-    try {
-        const imageDataUrl = await readFileAsDataUrl(file);
-        const prompt = [
-            "Extrahiere aus dem Foto nur Einkaufsartikel.",
-            "Ignoriere Fliesstext, Ueberschriften, Preise, Mengen, Satzfragmente.",
-            "Gib ausschliesslich ein JSON-Array aus, Beispiel: [\"Milch\",\"Eier\",\"Brot\"].",
-            "Maximal 40 Eintraege, ohne Duplikate."
-        ].join(" ");
-
-        const response = await fetch(OPENAI_API_URL, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${apiKey}`
-            },
-            body: JSON.stringify({
-                model: OPENAI_MODEL,
-                input: [
-                    {
-                        role: "user",
-                        content: [
-                            { type: "input_text", text: prompt },
-                            { type: "input_image", image_url: imageDataUrl }
-                        ]
-                    }
-                ],
-                temperature: 0,
-                max_output_tokens: 300
-            })
-        });
-
-        if (!response.ok) {
-            const errText = await response.text();
-            throw new Error(`KI-Fehler ${response.status}: ${errText.slice(0, 120)}`);
-        }
-
-        const payload = await response.json();
-        const aiText = extractResponseText(payload);
-        const items = parseAiItems(aiText)
-            .map(cleanupOcrCandidate)
-            .filter(looksLikeShoppingItem);
-
-        if (!items.length) {
-            setMicStatus("KI hat keine passenden Einkaufsartikel gefunden.");
-            return true;
-        }
-
-        const unique = Array.from(new Set(items.map(item => item.trim()).filter(Boolean)));
-        const toInsert = unique.join("\n");
-        multiInput.value = multiInput.value.trim()
-            ? multiInput.value.trim() + "\n" + toInsert
-            : toInsert;
-        autoResize();
-        multiInput.focus();
-        fokusInputAmEnde();
-        setMicStatus("Einkaufsartikel per KI eingefuegt.");
-        return true;
-    } catch (err) {
-        console.warn("KI-Fotoauswertung fehlgeschlagen:", err);
-        setMicStatus("KI fehlgeschlagen, nutze OCR...");
-        return false;
-    } finally {
-        if (btnPhotoOcr) btnPhotoOcr.disabled = false;
-    }
-}
-
-async function runPhotoOcr(file) {
-    if (!file) return;
-    if (!window.Tesseract?.recognize) {
-        setMicStatus("Foto-Text nicht verfuegbar.");
-        return;
-    }
-
-    if (btnPhotoOcr) btnPhotoOcr.disabled = true;
-    setMicStatus("Foto wird erkannt...");
-
-    try {
-        const result = await window.Tesseract.recognize(file, "deu+eng", {
-            logger: msg => {
-                if (msg?.status === "recognizing text" && typeof msg.progress === "number") {
-                    const percent = Math.round(msg.progress * 100);
-                    setMicStatus(`Foto wird erkannt... ${percent}%`);
-                }
-            }
-        });
-
-        const extracted = cleanOcrText(result?.data?.text || "");
-        if (!extracted) {
-            setMicStatus("Kein Text im Foto erkannt.");
-            return;
-        }
-
-        multiInput.value = multiInput.value.trim()
-            ? multiInput.value.trim() + "\n" + extracted
-            : extracted;
-        autoResize();
-        multiInput.focus();
-        fokusInputAmEnde();
-        setMicStatus("Text aus Foto eingefuegt.");
-    } catch (err) {
-        console.warn("OCR fehlgeschlagen:", err);
-        setMicStatus("Foto konnte nicht gelesen werden.");
-    } finally {
-        if (btnPhotoOcr) btnPhotoOcr.disabled = false;
-        if (photoOcrInput) photoOcrInput.value = "";
-    }
 }
 
 if (btnClearInput) {
@@ -946,10 +757,14 @@ if (btnPhotoOcr && photoOcrInput) {
     btnPhotoOcr.onclick = () => photoOcrInput.click();
     photoOcrInput.onchange = () => {
         const file = photoOcrInput.files?.[0];
-        void (async () => {
-            const aiHandled = await runPhotoAi(file);
-            if (!aiHandled) await runPhotoOcr(file);
-        })();
+        void addPhotoAsListItem(file);
+    };
+}
+
+if (btnImageViewerClose) btnImageViewerClose.onclick = closeImageViewer;
+if (imageViewer) {
+    imageViewer.onclick = event => {
+        if (event.target === imageViewer) closeImageViewer();
     };
 }
 
@@ -1172,9 +987,11 @@ btnEinkaufen.onclick = () => setModus("einkaufen");
 
 btnExport.onclick = async () => {
     const text = [...liste.querySelectorAll("li")]
-        .map(li =>
-            (li.classList.contains("erledigt") ? "✔ " : "• ") + li.dataset.text
-        )
+        .map(li => {
+            const raw = String(li.dataset.rawText || li.dataset.text || "");
+            const label = raw.startsWith(IMAGE_ENTRY_PREFIX) ? "[Foto]" : raw;
+            return (li.classList.contains("erledigt") ? "✔ " : "• ") + label;
+        })
         .join("\n");
 
     if (navigator.share) {

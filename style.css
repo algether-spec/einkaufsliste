@@ -386,6 +386,70 @@ li.erledigt {
     opacity: 0.5;
 }
 
+.list-photo-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+}
+
+.list-photo-thumb {
+    width: 64px;
+    height: 64px;
+    object-fit: cover;
+    border-radius: 10px;
+    border: 1px solid #cbd5e1;
+    flex: 0 0 auto;
+}
+
+.list-photo-open {
+    min-height: 36px;
+    padding: 6px 10px;
+    border-radius: 10px;
+    border: 1px solid #cbd5e1;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.image-viewer {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.85);
+    z-index: 90;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    gap: 12px;
+}
+
+.image-viewer[hidden] {
+    display: none !important;
+}
+
+.image-viewer-close {
+    min-height: 36px;
+    padding: 6px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.35);
+    background: rgba(15, 23, 42, 0.6);
+    color: #f8fafc;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.image-viewer-img {
+    width: 100%;
+    max-width: 540px;
+    max-height: calc(100vh - 110px);
+    object-fit: contain;
+    border-radius: 12px;
+    background: #ffffff;
+}
+
 /* Einkaufsmodus */
 
 

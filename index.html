@@ -82,7 +82,7 @@
 
                 <button type="button"
                         id="btn-photo-ocr"
-                        class="photo-button">Foto KI</button>
+                        class="photo-button">Foto</button>
 
                 <button type="button"
                         id="btn-clear-input"
@@ -111,8 +111,13 @@
 
     </main>
 
+    <div id="image-viewer" class="image-viewer" hidden>
+        <button type="button" id="btn-image-viewer-close" class="image-viewer-close">Schließen</button>
+        <img id="image-viewer-img" class="image-viewer-img" alt="Fotoeintrag">
+    </div>
+
     <div class="version-row">
-        <div class="version-badge" id="version-badge">v1.0.31</div>
+        <div class="version-badge" id="version-badge">v1.0.32</div>
         <button type="button" id="btn-force-update" class="update-button">Update</button>
     </div>
     <div class="sync-status" id="sync-status">Sync: Lokal</div>
@@ -132,7 +137,6 @@
 
 <script src="config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="app.js"></script>
 
 </body>
