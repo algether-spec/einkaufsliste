@@ -213,6 +213,9 @@ button:disabled {
 .input-actions {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-areas:
+        "mic clear export"
+        "add add photo";
     gap: 8px;
     align-items: stretch;
 }
@@ -226,7 +229,7 @@ button:disabled {
     background: var(--primary);
     color: white;
     font-size: 15px;
-    grid-column: span 1;
+    grid-area: add;
 }
 
 .clear-input-button {
@@ -234,6 +237,7 @@ button:disabled {
     color: #b91c1c;
     font-size: 13px;
     font-weight: 700;
+    grid-area: clear;
 }
 
 .photo-button {
@@ -241,6 +245,7 @@ button:disabled {
     color: #075985;
     font-size: 13px;
     font-weight: 700;
+    grid-area: photo;
 }
 
 .export-button {
@@ -249,12 +254,14 @@ button:disabled {
     font-size: 15px;
     font-weight: 700;
     letter-spacing: 0.01em;
+    grid-area: export;
 }
 
 .mic-button {
     background: #dbeafe;
     color: #1e40af;
     font-size: 17px;
+    grid-area: mic;
 }
 
 .mic-button.listening {
@@ -405,6 +412,17 @@ li.erledigt {
     background: #eff6ff;
     color: #1d4ed8;
     font-size: 13px;
+    font-weight: 700;
+}
+
+.list-photo-delete {
+    min-height: 36px;
+    padding: 6px 10px;
+    border-radius: 10px;
+    border: 1px solid #fecaca;
+    background: #fee2e2;
+    color: #b91c1c;
+    font-size: 12px;
     font-weight: 700;
 }
 

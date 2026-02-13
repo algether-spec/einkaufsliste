@@ -48,7 +48,7 @@ const imageViewerImg = document.getElementById("image-viewer-img");
 const btnImageViewerClose = document.getElementById("btn-image-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.34";
+const APP_VERSION = "1.0.35";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -611,6 +611,17 @@ function eintragAnlegen(text, erledigt = false) {
             openImageViewer(imageSrc);
         };
 
+        const deleteBtn = document.createElement("button");
+        deleteBtn.type = "button";
+        deleteBtn.className = "list-photo-delete";
+        deleteBtn.textContent = "Löschen";
+        deleteBtn.onclick = event => {
+            event.stopPropagation();
+            li.remove();
+            speichern(true);
+            setMicStatus("Foto gelöscht.");
+        };
+
         thumb.onclick = event => {
             event.stopPropagation();
             openImageViewer(imageSrc);
@@ -618,6 +629,7 @@ function eintragAnlegen(text, erledigt = false) {
 
         wrapper.appendChild(thumb);
         wrapper.appendChild(openBtn);
+        wrapper.appendChild(deleteBtn);
         li.appendChild(wrapper);
     } else {
         li.textContent = rawText;
