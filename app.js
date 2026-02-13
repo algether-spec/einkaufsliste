@@ -45,7 +45,7 @@ const btnMic     = document.getElementById("mic-button");
 const micStatus  = document.getElementById("mic-status");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.29";
+const APP_VERSION = "1.0.30";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -62,6 +62,12 @@ const GROUP_RULES = [
     { name: "trockenwaren", patterns: ["nudel", "reis", "linsen", "bohnen", "konserve", "dose", "tomatenmark", "sauce", "bruehe", "muessli", "haferflocken"] },
     { name: "getraenke", patterns: ["wasser", "saft", "cola", "fanta", "sprite", "bier", "wein", "kaffee", "tee"] },
     { name: "drogerie", patterns: ["toilettenpapier", "kuechenrolle", "spuelmittel", "waschmittel", "seife", "shampoo", "zahnpasta", "deo", "muellbeutel"] }
+];
+const OCR_STOPWORDS = [
+    "zubereitung", "rezept", "anleitung", "schritt", "ofen", "backofen",
+    "minuten", "minute", "sekunden", "grad", "portion", "portionen",
+    "hinweis", "mischen", "ruehren", "verruehren", "kochen", "backen",
+    "servieren", "zutatenliste"
 ];
 const hasSupabaseCredentials = Boolean(
     APP_CONFIG.supabaseUrl && APP_CONFIG.supabaseAnonKey
@@ -669,13 +675,80 @@ function clearInputBuffer(stopDictation = false) {
     }
 }
 
+function toAsciiLower(text) {
+    return String(text || "")
+        .toLowerCase()
+        .replace(/ä/g, "ae")
+        .replace(/ö/g, "oe")
+        .replace(/ü/g, "ue")
+        .replace(/ß/g, "ss");
+}
+
+function hasVowel(token) {
+    return /[aeiouy]/.test(toAsciiLower(token));
+}
+
+function isLikelyProductToken(token) {
+    const cleaned = toAsciiLower(token).replace(/[^a-z]/g, "");
+    return cleaned.length >= 2 && cleaned.length <= 20 && hasVowel(cleaned);
+}
+
+function cleanupOcrCandidate(line) {
+    return String(line || "")
+        .replace(/[(){}\[\]]/g, " ")
+        .replace(/^[-•*]\s*/, "")
+        .replace(/^\d+[.,]?\d*\s*(kg|g|mg|l|ml|el|tl|stk|stueck|packung|becher|prise|bund)\b/i, "")
+        .replace(/\b\d+[.,]?\d*\s*(kg|g|mg|l|ml|el|tl|stk|stueck|packung|becher|prise|bund)\b/gi, "")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+function looksLikeShoppingItem(line) {
+    const raw = String(line || "").trim();
+    if (!raw) return false;
+
+    const normalized = toAsciiLower(raw);
+    if (OCR_STOPWORDS.some(word => normalized.includes(word))) return false;
+    if (raw.length < 2 || raw.length > 36) return false;
+    if ((raw.match(/\d/g) || []).length > 2) return false;
+    if (/[@#$%^&*_=+<>\\|]/.test(raw)) return false;
+
+    const tokens = raw
+        .split(/\s+/)
+        .map(t => t.replace(/[^A-Za-zÄÖÜäöüß]/g, ""))
+        .filter(Boolean);
+
+    if (!tokens.length || tokens.length > 4) return false;
+    if (!tokens.some(isLikelyProductToken)) return false;
+    if (tokens.some(t => !isLikelyProductToken(t))) return false;
+
+    const hasKnownKeyword = GROUP_RULES.some(rule =>
+        rule.patterns.some(pattern => normalized.includes(pattern))
+    );
+    if (hasKnownKeyword) return true;
+
+    // Fallback: allow short natural-looking product phrases.
+    return tokens.length <= 2 && tokens.join("").length >= 4;
+}
+
 function cleanOcrText(rawText) {
-    return String(rawText || "")
-        .split("\n")
-        .map(line => line.trim())
-        .map(line => line.replace(/^[-•*]\s*/, ""))
-        .filter(Boolean)
-        .join("\n");
+    const candidates = String(rawText || "")
+        .split(/[\n,;]+/)
+        .map(cleanupOcrCandidate)
+        .filter(Boolean);
+
+    const unique = [];
+    const seen = new Set();
+
+    for (const candidate of candidates) {
+        if (!looksLikeShoppingItem(candidate)) continue;
+        const key = toAsciiLower(candidate);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        unique.push(candidate);
+    }
+
+    return unique.join("\n");
 }
 
 async function runPhotoOcr(file) {
