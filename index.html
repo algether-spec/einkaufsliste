@@ -81,6 +81,10 @@
                         aria-pressed="false">🎤</button>
 
                 <button type="button"
+                        id="btn-photo-ocr"
+                        class="photo-button">Foto</button>
+
+                <button type="button"
                         id="btn-clear-input"
                         class="clear-input-button">Löschen</button>
 
@@ -93,6 +97,13 @@
                         class="export-button">Export</button>
             </div>
 
+            <input
+                type="file"
+                id="photo-ocr-input"
+                accept="image/*"
+                capture="environment"
+                hidden>
+
             <div id="mic-status" class="mic-status" aria-live="polite"></div>
         </div>
 
@@ -101,7 +112,7 @@
     </main>
 
     <div class="version-row">
-        <div class="version-badge" id="version-badge">v1.0.28</div>
+        <div class="version-badge" id="version-badge">v1.0.29</div>
         <button type="button" id="btn-force-update" class="update-button">Update</button>
     </div>
     <div class="sync-status" id="sync-status">Sync: Lokal</div>
@@ -121,6 +132,7 @@
 
 <script src="config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="app.js"></script>
 
 </body>

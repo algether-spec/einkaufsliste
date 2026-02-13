@@ -37,13 +37,15 @@ const authStatus   = document.getElementById("auth-status");
 
 const multiInput = document.getElementById("multi-line-input");
 const multiAdd   = document.getElementById("add-all-button");
+const btnPhotoOcr = document.getElementById("btn-photo-ocr");
+const photoOcrInput = document.getElementById("photo-ocr-input");
 const btnClearInput = document.getElementById("btn-clear-input");
 const btnNewLine = document.getElementById("newline-button");
 const btnMic     = document.getElementById("mic-button");
 const micStatus  = document.getElementById("mic-status");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.28";
+const APP_VERSION = "1.0.29";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -667,10 +669,69 @@ function clearInputBuffer(stopDictation = false) {
     }
 }
 
+function cleanOcrText(rawText) {
+    return String(rawText || "")
+        .split("\n")
+        .map(line => line.trim())
+        .map(line => line.replace(/^[-•*]\s*/, ""))
+        .filter(Boolean)
+        .join("\n");
+}
+
+async function runPhotoOcr(file) {
+    if (!file) return;
+    if (!window.Tesseract?.recognize) {
+        setMicStatus("Foto-Text nicht verfuegbar.");
+        return;
+    }
+
+    if (btnPhotoOcr) btnPhotoOcr.disabled = true;
+    setMicStatus("Foto wird erkannt...");
+
+    try {
+        const result = await window.Tesseract.recognize(file, "deu+eng", {
+            logger: msg => {
+                if (msg?.status === "recognizing text" && typeof msg.progress === "number") {
+                    const percent = Math.round(msg.progress * 100);
+                    setMicStatus(`Foto wird erkannt... ${percent}%`);
+                }
+            }
+        });
+
+        const extracted = cleanOcrText(result?.data?.text || "");
+        if (!extracted) {
+            setMicStatus("Kein Text im Foto erkannt.");
+            return;
+        }
+
+        multiInput.value = multiInput.value.trim()
+            ? multiInput.value.trim() + "\n" + extracted
+            : extracted;
+        autoResize();
+        multiInput.focus();
+        fokusInputAmEnde();
+        setMicStatus("Text aus Foto eingefuegt.");
+    } catch (err) {
+        console.warn("OCR fehlgeschlagen:", err);
+        setMicStatus("Foto konnte nicht gelesen werden.");
+    } finally {
+        if (btnPhotoOcr) btnPhotoOcr.disabled = false;
+        if (photoOcrInput) photoOcrInput.value = "";
+    }
+}
+
 if (btnClearInput) {
     btnClearInput.onclick = () => {
         clearInputBuffer(false);
         multiInput.focus();
+    };
+}
+
+if (btnPhotoOcr && photoOcrInput) {
+    btnPhotoOcr.onclick = () => photoOcrInput.click();
+    photoOcrInput.onchange = () => {
+        const file = photoOcrInput.files?.[0];
+        void runPhotoOcr(file);
     };
 }
 
