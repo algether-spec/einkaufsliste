@@ -48,7 +48,7 @@ const imageViewerImg = document.getElementById("image-viewer-img");
 const btnImageViewerClose = document.getElementById("btn-image-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.33";
+const APP_VERSION = "1.0.34";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
