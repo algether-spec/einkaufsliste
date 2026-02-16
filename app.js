@@ -48,7 +48,7 @@ const imageViewerImg = document.getElementById("image-viewer-img");
 const btnImageViewerClose = document.getElementById("btn-image-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.35";
+const APP_VERSION = "1.0.36";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -98,6 +98,8 @@ const debugEnabled = new URLSearchParams(location.search).get("debug") === "1";
 let currentSyncCode = "";
 let syncEditMode = false;
 let backgroundSyncTimer = null;
+let remoteRealtimeChannel = null;
+let remoteRealtimeTimer = null;
 
 if (authBar) {
     authBar.hidden = true;
@@ -157,6 +159,7 @@ function applySyncCode(code, shouldReload = true) {
     setAuthStatus(`Geraete-Code: ${currentSyncCode}`);
     setSyncEditMode(false);
     if (syncCodeInput) syncCodeInput.blur();
+    if (supabaseClient) startRealtimeSync();
     updateSyncDebug();
     if (shouldReload) void laden();
 }
@@ -374,6 +377,53 @@ function updateSyncDebug() {
     syncDebug.textContent = `debug code=${code} uid=${uid} lastSync=${syncText}`;
 }
 
+function stopRealtimeSync() {
+    if (remoteRealtimeTimer) {
+        clearTimeout(remoteRealtimeTimer);
+        remoteRealtimeTimer = null;
+    }
+    if (!supabaseClient || !remoteRealtimeChannel) return;
+    try {
+        supabaseClient.removeChannel(remoteRealtimeChannel);
+    } catch (err) {
+        console.warn("Realtime-Channel konnte nicht entfernt werden:", err);
+    }
+    remoteRealtimeChannel = null;
+}
+
+function scheduleRealtimeRefresh() {
+    if (remoteRealtimeTimer) clearTimeout(remoteRealtimeTimer);
+    remoteRealtimeTimer = setTimeout(() => {
+        void refreshFromRemoteIfChanged();
+    }, 250);
+}
+
+function startRealtimeSync() {
+    if (!supabaseClient || !currentSyncCode) return;
+    stopRealtimeSync();
+
+    remoteRealtimeChannel = supabaseClient
+        .channel(`shopping_items_${currentSyncCode}`)
+        .on(
+            "postgres_changes",
+            {
+                event: "*",
+                schema: "public",
+                table: SUPABASE_TABLE,
+                filter: `sync_code=eq.${currentSyncCode}`
+            },
+            () => {
+                if (document.hidden) return;
+                scheduleRealtimeRefresh();
+            }
+        )
+        .subscribe(status => {
+            if (status === "CHANNEL_ERROR") {
+                console.warn("Realtime-Channel Fehler, nutze Polling weiter.");
+            }
+        });
+}
+
 async function ensureSupabaseAuth() {
     if (!supabaseClient) return false;
     if (supabaseReady && supabaseUserId) return true;
@@ -391,6 +441,7 @@ async function ensureSupabaseAuth() {
         if (!user?.id) return false;
         supabaseUserId = user.id;
         supabaseReady = true;
+        startRealtimeSync();
         setSyncStatus("Sync: Verbunden", "ok");
         updateSyncDebug();
         return true;
@@ -398,6 +449,7 @@ async function ensureSupabaseAuth() {
         console.warn("Supabase Auth nicht verfuegbar:", err);
         supabaseReady = false;
         supabaseUserId = "";
+        stopRealtimeSync();
         setSyncStatus("Sync: Offline (lokal)", "offline");
         updateSyncDebug();
         return false;
