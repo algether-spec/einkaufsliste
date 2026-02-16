@@ -48,7 +48,7 @@ const imageViewerImg = document.getElementById("image-viewer-img");
 const btnImageViewerClose = document.getElementById("btn-image-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.36";
+const APP_VERSION = "1.0.37";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -58,16 +58,29 @@ const SYNC_CODE_KEY = "einkaufsliste-sync-code";
 const IMAGE_ENTRY_PREFIX = "__IMG__:";
 const SYNC_CODE_LENGTH = 4;
 const BACKGROUND_SYNC_INTERVAL_MS = 4000;
-const GROUP_RULES = [
-    { name: "obst_gemuese", patterns: ["apfel", "banane", "birne", "zitrone", "orange", "traube", "beere", "salat", "gurke", "tomate", "paprika", "zucchini", "kartoffel", "zwiebel", "knoblauch", "karotte", "mohrrube", "brokkoli", "blumenkohl", "pilz", "avocado"] },
-    { name: "backen", patterns: ["brot", "broetchen", "toast", "mehl", "hefe", "backpulver", "zucker", "vanille", "kuchen", "croissant"] },
-    { name: "milch_eier", patterns: ["milch", "joghurt", "quark", "kaese", "butter", "sahne", "ei", "frischkaese", "mozzarella", "parmesan"] },
-    { name: "fleisch_fisch", patterns: ["fleisch", "huhn", "haehnchen", "pute", "rind", "schwein", "hack", "wurst", "schinken", "salami", "speck", "fisch", "lachs", "thunfisch"] },
-    { name: "tiefkuehl", patterns: ["tk", "tiefkuehl", "pizza", "pommes", "eis", "gemuese mix", "beeren mix"] },
-    { name: "trockenwaren", patterns: ["nudel", "reis", "linsen", "bohnen", "konserve", "dose", "tomatenmark", "sauce", "bruehe", "muessli", "haferflocken"] },
-    { name: "getraenke", patterns: ["wasser", "saft", "cola", "fanta", "sprite", "bier", "wein", "kaffee", "tee"] },
-    { name: "drogerie", patterns: ["toilettenpapier", "kuechenrolle", "spuelmittel", "waschmittel", "seife", "shampoo", "zahnpasta", "deo", "muellbeutel"] }
+const GROUP_DEFINITIONS = {
+    obst_gemuese: ["apfel", "banane", "birne", "zitrone", "orange", "traube", "beere", "salat", "gurke", "tomate", "paprika", "zucchini", "kartoffel", "zwiebel", "knoblauch", "karotte", "mohrrube", "brokkoli", "blumenkohl", "pilz", "avocado"],
+    backen: ["brot", "broetchen", "toast", "mehl", "hefe", "backpulver", "zucker", "vanille", "kuchen", "croissant"],
+    fleisch_fisch: ["fleisch", "huhn", "haehnchen", "pute", "rind", "schwein", "hack", "wurst", "schinken", "salami", "speck", "fisch", "lachs", "thunfisch"],
+    milch_eier: ["milch", "joghurt", "quark", "kaese", "butter", "sahne", "ei", "frischkaese", "mozzarella", "parmesan"],
+    tiefkuehl: ["tk", "tiefkuehl", "pizza", "pommes", "eis", "gemuese mix", "beeren mix"],
+    trockenwaren: ["nudel", "reis", "linsen", "bohnen", "konserve", "dose", "tomatenmark", "sauce", "bruehe", "muessli", "haferflocken"],
+    getraenke: ["wasser", "saft", "cola", "fanta", "sprite", "bier", "wein", "kaffee", "tee"],
+    drogerie: ["toilettenpapier", "kuechenrolle", "spuelmittel", "waschmittel", "seife", "shampoo", "zahnpasta", "deo", "muellbeutel"]
+};
+const DEFAULT_GROUP_ORDER = [
+    "obst_gemuese",
+    "backen",
+    "fleisch_fisch",
+    "milch_eier",
+    "tiefkuehl",
+    "trockenwaren",
+    "getraenke",
+    "drogerie"
 ];
+const GROUP_ORDER = Array.isArray(APP_CONFIG.storeGroupOrder)
+    ? APP_CONFIG.storeGroupOrder.filter(name => Array.isArray(GROUP_DEFINITIONS[name]))
+    : DEFAULT_GROUP_ORDER;
 const hasSupabaseCredentials = Boolean(
     APP_CONFIG.supabaseUrl && APP_CONFIG.supabaseAnonKey
 );
@@ -239,13 +252,14 @@ function normalizeForGroupMatch(text) {
 }
 
 function getGroupIndex(text) {
-    if (String(text || "").startsWith(IMAGE_ENTRY_PREFIX)) return GROUP_RULES.length + 1;
+    if (String(text || "").startsWith(IMAGE_ENTRY_PREFIX)) return GROUP_ORDER.length + 1;
     const normalized = normalizeForGroupMatch(text);
-    for (let i = 0; i < GROUP_RULES.length; i += 1) {
-        const rule = GROUP_RULES[i];
-        if (rule.patterns.some(pattern => normalized.includes(pattern))) return i;
+    for (let i = 0; i < GROUP_ORDER.length; i += 1) {
+        const groupName = GROUP_ORDER[i];
+        const patterns = GROUP_DEFINITIONS[groupName] || [];
+        if (patterns.some(pattern => normalized.includes(pattern))) return i;
     }
-    return GROUP_RULES.length;
+    return GROUP_ORDER.length;
 }
 
 function sortListByStoreGroups() {
