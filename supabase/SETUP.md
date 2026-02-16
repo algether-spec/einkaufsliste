@@ -32,3 +32,7 @@
 ## 7) Fehlerbild: `null value in column "user_id"`
 - Das ist ein Altbestand aus frueherem Schema (`user_id` war `NOT NULL`).
 - Loesung: `supabase/schema.sql` erneut komplett ausfuehren (enthaelt die automatische Migration).
+
+## 8) Fehlerbild: `column shopping_items.item_id does not exist`
+- Das Schema ist noch nicht auf dem aktuellen Stand (neuer stabiler Eintrag-Sync mit `item_id`).
+- Loesung: `supabase/schema.sql` erneut komplett ausfuehren, danach App auf beiden Geraeten neu laden.

@@ -240,23 +240,38 @@ function setupSyncCodeUi() {
 
 function normalizeListData(daten) {
     if (!Array.isArray(daten)) return [];
+    const seenItemIds = new Set();
     return daten
         .map((e, index) => ({
+            itemId: String(e?.itemId || e?.item_id || "").trim(),
             text: String(e?.text || "").trim(),
             erledigt: Boolean(e?.erledigt),
             position: Number.isFinite(e?.position) ? e.position : index
         }))
         .filter(e => e.text.length > 0)
+        .map(e => {
+            let itemId = e.itemId || generateItemId();
+            if (seenItemIds.has(itemId)) itemId = generateItemId();
+            seenItemIds.add(itemId);
+            return { ...e, itemId };
+        })
         .map((e, index) => ({ ...e, position: index }));
 }
 
 function listDataSignature(daten) {
     return JSON.stringify(
         normalizeListData(daten).map(e => ({
+            itemId: e.itemId,
             text: e.text.toLowerCase(),
-            erledigt: e.erledigt
+            erledigt: e.erledigt,
+            position: e.position
         }))
     );
+}
+
+function generateItemId() {
+    if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+    return `item-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function normalizeForGroupMatch(text) {
@@ -294,6 +309,7 @@ function sortListByStoreGroups() {
     });
 
     const sortierte = [...offene, ...erledigte].map((e, index) => ({
+        itemId: e.itemId,
         text: e.text,
         erledigt: e.erledigt,
         position: index
@@ -308,20 +324,25 @@ function mergeListConflict(localDaten, remoteDaten) {
     const local = normalizeListData(localDaten);
     const remote = normalizeListData(remoteDaten);
     const merged = [];
-    const seen = new Set();
+    const seenById = new Set();
+    const seenByText = new Set();
 
     for (const item of local) {
-        const key = item.text.toLowerCase();
-        if (seen.has(key)) continue;
-        seen.add(key);
-        merged.push({ text: item.text, erledigt: item.erledigt, position: merged.length });
+        const textKey = item.text.toLowerCase();
+        if (seenById.has(item.itemId)) continue;
+        if (seenByText.has(textKey)) continue;
+        seenById.add(item.itemId);
+        seenByText.add(textKey);
+        merged.push({ itemId: item.itemId, text: item.text, erledigt: item.erledigt, position: merged.length });
     }
 
     for (const item of remote) {
-        const key = item.text.toLowerCase();
-        if (seen.has(key)) continue;
-        seen.add(key);
-        merged.push({ text: item.text, erledigt: item.erledigt, position: merged.length });
+        const textKey = item.text.toLowerCase();
+        if (seenById.has(item.itemId)) continue;
+        if (seenByText.has(textKey)) continue;
+        seenById.add(item.itemId);
+        seenByText.add(textKey);
+        merged.push({ itemId: item.itemId, text: item.text, erledigt: item.erledigt, position: merged.length });
     }
 
     return merged;
@@ -491,7 +512,10 @@ function datenAusListeLesen() {
     const daten = [];
 
     liste.querySelectorAll("li").forEach((li, index) => {
+        const itemId = String(li.dataset.itemId || "").trim() || generateItemId();
+        li.dataset.itemId = itemId;
         daten.push({
+            itemId,
             text: li.dataset.rawText || li.dataset.text || "",
             erledigt: li.classList.contains("erledigt"),
             position: index
@@ -503,7 +527,7 @@ function datenAusListeLesen() {
 
 function datenInListeSchreiben(daten) {
     liste.innerHTML = "";
-    daten.forEach(e => eintragAnlegen(e.text, e.erledigt));
+    daten.forEach(e => eintragAnlegen(e.text, e.erledigt, e.itemId));
 }
 
 function speichernLokal(daten) {
@@ -519,6 +543,7 @@ function ladenLokal() {
         if (!Array.isArray(parsed)) return [];
         return parsed
             .map((e, index) => ({
+                itemId: String(e.itemId || e.item_id || "").trim() || generateItemId(),
                 text: String(e.text || ""),
                 erledigt: Boolean(e.erledigt),
                 position: Number.isFinite(e.position) ? e.position : index
@@ -536,7 +561,7 @@ async function ladenRemote() {
 
     const { data, error } = await supabaseClient
         .from(SUPABASE_TABLE)
-        .select("text, erledigt, position")
+        .select("item_id, text, erledigt, position")
         .eq("sync_code", currentSyncCode)
         .order("position", { ascending: true });
 
@@ -544,6 +569,7 @@ async function ladenRemote() {
     if (!Array.isArray(data)) return [];
 
     return data.map((e, index) => ({
+        itemId: String(e.item_id || "").trim() || generateItemId(),
         text: String(e.text || ""),
         erledigt: Boolean(e.erledigt),
         position: Number.isFinite(e.position) ? e.position : index
@@ -554,26 +580,49 @@ async function speichernRemote(daten) {
     if (!supabaseClient) return;
     if (!(await ensureSupabaseAuth())) return;
 
-    const { error: deleteError } = await supabaseClient
-        .from(SUPABASE_TABLE)
-        .delete()
-        .eq("sync_code", currentSyncCode);
+    if (!daten.length) {
+        const { error: deleteAllError } = await supabaseClient
+            .from(SUPABASE_TABLE)
+            .delete()
+            .eq("sync_code", currentSyncCode);
 
-    if (deleteError) throw deleteError;
-    if (!daten.length) return;
+        if (deleteAllError) throw deleteAllError;
+        return;
+    }
 
     const payload = daten.map((e, index) => ({
         sync_code: currentSyncCode,
+        item_id: String(e.itemId || "").trim() || generateItemId(),
         text: e.text,
         erledigt: e.erledigt,
         position: index
     }));
 
-    const { error: insertError } = await supabaseClient
+    const { error: upsertError } = await supabaseClient
         .from(SUPABASE_TABLE)
-        .insert(payload);
+        .upsert(payload, { onConflict: "sync_code,item_id" });
 
-    if (insertError) throw insertError;
+    if (upsertError) throw upsertError;
+
+    const localItemIdSet = new Set(payload.map(item => item.item_id));
+    const { data: remoteRows, error: remoteRowsError } = await supabaseClient
+        .from(SUPABASE_TABLE)
+        .select("item_id")
+        .eq("sync_code", currentSyncCode);
+
+    if (remoteRowsError) throw remoteRowsError;
+    const remoteItemIds = (remoteRows || []).map(row => String(row.item_id || "").trim()).filter(Boolean);
+    const obsoleteItemIds = remoteItemIds.filter(itemId => !localItemIdSet.has(itemId));
+
+    if (obsoleteItemIds.length > 0) {
+        const { error: deleteObsoleteError } = await supabaseClient
+            .from(SUPABASE_TABLE)
+            .delete()
+            .eq("sync_code", currentSyncCode)
+            .in("item_id", obsoleteItemIds);
+
+        if (deleteObsoleteError) throw deleteObsoleteError;
+    }
 }
 
 async function syncRemoteIfNeeded(forceOverwrite = false) {
@@ -719,9 +768,10 @@ async function laden() {
    EINTRÄGE
 ====================== */
 
-function eintragAnlegen(text, erledigt = false) {
+function eintragAnlegen(text, erledigt = false, itemId = generateItemId()) {
     const li = document.createElement("li");
     const rawText = String(text || "");
+    li.dataset.itemId = String(itemId || "").trim() || generateItemId();
     li.dataset.rawText = rawText;
     li.dataset.text = rawText;
 

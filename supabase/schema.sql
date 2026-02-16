@@ -1,6 +1,7 @@
 create table if not exists public.shopping_items (
   id bigint generated always as identity primary key,
   sync_code text not null,
+  item_id text,
   text text not null,
   erledigt boolean not null default false,
   position integer not null default 0,
@@ -8,11 +9,24 @@ create table if not exists public.shopping_items (
   updated_at timestamptz not null default now()
 );
 
+alter table public.shopping_items
+  add column if not exists item_id text;
+
+update public.shopping_items
+set item_id = 'legacy-' || id::text
+where item_id is null or length(trim(item_id)) = 0;
+
+alter table public.shopping_items
+  alter column item_id set not null;
+
 create index if not exists shopping_items_sync_code_idx
   on public.shopping_items (sync_code);
 
 create index if not exists shopping_items_sync_code_position_idx
   on public.shopping_items (sync_code, position);
+
+create unique index if not exists shopping_items_sync_code_item_id_uidx
+  on public.shopping_items (sync_code, item_id);
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -60,14 +74,20 @@ drop policy if exists "shopping_items_insert_by_code" on public.shopping_items;
 create policy "shopping_items_insert_by_code"
 on public.shopping_items
 for insert
-with check (sync_code is not null and length(sync_code) > 0);
+with check (
+  sync_code is not null and length(sync_code) > 0
+  and item_id is not null and length(item_id) > 0
+);
 
 drop policy if exists "shopping_items_update_by_code" on public.shopping_items;
 create policy "shopping_items_update_by_code"
 on public.shopping_items
 for update
 using (true)
-with check (sync_code is not null and length(sync_code) > 0);
+with check (
+  sync_code is not null and length(sync_code) > 0
+  and item_id is not null and length(item_id) > 0
+);
 
 drop policy if exists "shopping_items_delete_by_code" on public.shopping_items;
 create policy "shopping_items_delete_by_code"
