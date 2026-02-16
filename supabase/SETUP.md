@@ -18,6 +18,7 @@
 - Wenn Supabase nicht erreichbar ist: App bleibt lokal nutzbar (Fallback auf `localStorage`).
 - Sync laeuft ueber einen 4-stelligen geraeteuebergreifenden Zahlencode (`Geräte-Code` in der App).
 - Auf beiden Handys denselben Code eintragen, dann teilen beide dieselbe Liste.
+- `0000` ist reserviert (Anleitungs-Code) und kann nicht als Geräte-Code genutzt werden.
 
 ## 5) Hinweis
 - Die Tabelle ist mit Row Level Security (RLS) geschuetzt.
@@ -27,3 +28,7 @@
 - Ursache ist meist fehlende DB-Berechtigung fuer `anon`/`authenticated` (insb. Sequence bei Insert).
 - Loesung: `supabase/schema.sql` im SQL Editor erneut komplett ausfuehren.
 - Danach App auf beiden Geraeten neu laden und erneut mit gleichem 4-stelligen Code verbinden.
+
+## 7) Fehlerbild: `null value in column "user_id"`
+- Das ist ein Altbestand aus frueherem Schema (`user_id` war `NOT NULL`).
+- Loesung: `supabase/schema.sql` erneut komplett ausfuehren (enthaelt die automatische Migration).

@@ -48,7 +48,7 @@ const imageViewerImg = document.getElementById("image-viewer-img");
 const btnImageViewerClose = document.getElementById("btn-image-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.37";
+const APP_VERSION = "1.0.38";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -57,6 +57,7 @@ const SUPABASE_TABLE = "shopping_items";
 const SYNC_CODE_KEY = "einkaufsliste-sync-code";
 const IMAGE_ENTRY_PREFIX = "__IMG__:";
 const SYNC_CODE_LENGTH = 4;
+const RESERVED_SYNC_CODE = "0000";
 const BACKGROUND_SYNC_INTERVAL_MS = 4000;
 const GROUP_DEFINITIONS = {
     obst_gemuese: ["apfel", "banane", "birne", "zitrone", "orange", "traube", "beere", "salat", "gurke", "tomate", "paprika", "zucchini", "kartoffel", "zwiebel", "knoblauch", "karotte", "mohrrube", "brokkoli", "blumenkohl", "pilz", "avocado"],
@@ -146,13 +147,21 @@ function isValidSyncCode(code) {
     return new RegExp("^\\d{" + SYNC_CODE_LENGTH + "}$").test(code);
 }
 
+function isReservedSyncCode(code) {
+    return code === RESERVED_SYNC_CODE;
+}
+
 function generateSyncCode() {
-    return String(Math.floor(Math.random() * 10000)).padStart(SYNC_CODE_LENGTH, "0");
+    let nextCode = RESERVED_SYNC_CODE;
+    while (isReservedSyncCode(nextCode)) {
+        nextCode = String(Math.floor(Math.random() * 10000)).padStart(SYNC_CODE_LENGTH, "0");
+    }
+    return nextCode;
 }
 
 function getStoredSyncCode() {
     const stored = normalizeSyncCode(localStorage.getItem(SYNC_CODE_KEY) || "");
-    if (stored) return stored;
+    if (stored && !isReservedSyncCode(stored)) return stored;
     const created = generateSyncCode();
     localStorage.setItem(SYNC_CODE_KEY, created);
     return created;
@@ -162,6 +171,11 @@ function applySyncCode(code, shouldReload = true) {
     const normalized = normalizeSyncCode(code);
     if (!isValidSyncCode(normalized)) {
         setAuthStatus("Bitte 4-stelligen Zahlencode eingeben.");
+        return;
+    }
+    if (isReservedSyncCode(normalized)) {
+        setAuthStatus("Code 0000 ist fuer Anleitung reserviert. Bitte anderen Code verwenden.");
+        if (syncCodeInput) syncCodeInput.value = currentSyncCode || "";
         return;
     }
 
