@@ -57,6 +57,7 @@ const SUPABASE_TABLE = "shopping_items";
 const SYNC_CODE_KEY = "einkaufsliste-sync-code";
 const IMAGE_ENTRY_PREFIX = "__IMG__:";
 const SYNC_CODE_LENGTH = 4;
+const BACKGROUND_SYNC_INTERVAL_MS = 4000;
 const GROUP_RULES = [
     { name: "obst_gemuese", patterns: ["apfel", "banane", "birne", "zitrone", "orange", "traube", "beere", "salat", "gurke", "tomate", "paprika", "zucchini", "kartoffel", "zwiebel", "knoblauch", "karotte", "mohrrube", "brokkoli", "blumenkohl", "pilz", "avocado"] },
     { name: "backen", patterns: ["brot", "broetchen", "toast", "mehl", "hefe", "backpulver", "zucker", "vanille", "kuchen", "croissant"] },
@@ -89,12 +90,14 @@ let restartMicAfterManualCommit = false;
 let remoteSyncInFlight = false;
 let remoteSyncQueued = false;
 let remoteSyncForceOverwrite = false;
+let remotePullInFlight = false;
 let supabaseReady = false;
 let supabaseUserId = "";
 let lastSyncAt = "";
 const debugEnabled = new URLSearchParams(location.search).get("debug") === "1";
 let currentSyncCode = "";
 let syncEditMode = false;
+let backgroundSyncTimer = null;
 
 if (authBar) {
     authBar.hidden = true;
@@ -537,6 +540,53 @@ async function syncRemoteIfNeeded(forceOverwrite = false) {
     } finally {
         remoteSyncInFlight = false;
     }
+}
+
+async function refreshFromRemoteIfChanged() {
+    if (!supabaseClient) return;
+    if (remoteSyncInFlight || remotePullInFlight) return;
+
+    remotePullInFlight = true;
+    try {
+        const remoteDaten = await ladenRemote();
+        if (!Array.isArray(remoteDaten)) return;
+
+        const normalizedRemote = normalizeListData(remoteDaten);
+        const lokaleDaten = normalizeListData(datenAusListeLesen());
+
+        if (listDataSignature(normalizedRemote) !== listDataSignature(lokaleDaten)) {
+            datenInListeSchreiben(normalizedRemote);
+            speichernLokal(normalizedRemote);
+            setAuthStatus("Liste von anderem Geraet aktualisiert.");
+        }
+
+        lastSyncAt = formatTimeIso(new Date());
+        setSyncStatus("Sync: Verbunden", "ok");
+        updateSyncDebug();
+    } catch (err) {
+        console.warn("Remote-Refresh fehlgeschlagen:", err, formatSupabaseError(err));
+        setSyncStatus("Sync: Offline (lokal)", "offline");
+        setAuthStatus(getSyncErrorHint(err));
+        updateSyncDebug();
+    } finally {
+        remotePullInFlight = false;
+    }
+}
+
+function startBackgroundSync() {
+    if (!supabaseClient) return;
+    if (backgroundSyncTimer) clearInterval(backgroundSyncTimer);
+
+    backgroundSyncTimer = setInterval(() => {
+        if (document.hidden) return;
+        void refreshFromRemoteIfChanged();
+    }, BACKGROUND_SYNC_INTERVAL_MS);
+
+    window.addEventListener("focus", () => void refreshFromRemoteIfChanged());
+    window.addEventListener("online", () => void refreshFromRemoteIfChanged());
+    document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) void refreshFromRemoteIfChanged();
+    });
 }
 
 function speichern(forceOverwrite = false) {
@@ -1040,6 +1090,7 @@ setupSyncCodeUi();
 if (btnForceUpdate) btnForceUpdate.onclick = () => void forceAppUpdate();
 
 if (supabaseClient) {
+    startBackgroundSync();
     void laden();
 } else {
     setSyncStatus("Sync: Lokal", "offline");
