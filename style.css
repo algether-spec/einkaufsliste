@@ -362,13 +362,14 @@ body.modus-einkaufen .input-section {
 }
 
 /* Liste */
-ul {
+#liste {
     list-style: none;
     padding: 0;
     margin: 0;
+    display: block;
 }
 
-li {
+#liste li {
     background: white;
     padding: 5px 12px;
     border-radius: 14px;
@@ -381,7 +382,7 @@ li {
     font-size: 16px;
 }
 
-li.erledigt {
+#liste li.erledigt {
     border-left-color: var(--done);
     color: var(--done);
     text-decoration: line-through;
@@ -496,8 +497,22 @@ li.erledigt {
     margin: 0;
     padding-left: 20px;
     display: grid;
-    gap: 6px;
+    gap: 8px;
     color: #334155;
+}
+
+.help-card ol li {
+    list-style: decimal;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    margin: 0;
+    padding: 0;
+    border-radius: 0;
+    width: auto;
+    display: list-item;
+    font-size: 17px;
+    line-height: 1.35;
 }
 
 .help-close {
