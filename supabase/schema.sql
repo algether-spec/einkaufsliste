@@ -29,6 +29,21 @@ create trigger trg_shopping_items_updated_at
 before update on public.shopping_items
 for each row execute function public.set_updated_at();
 
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'shopping_items'
+      and column_name = 'user_id'
+      and is_nullable = 'NO'
+  ) then
+    execute 'alter table public.shopping_items alter column user_id drop not null';
+  end if;
+end
+$$;
+
 grant usage on schema public to anon, authenticated;
 grant select, insert, update, delete on public.shopping_items to anon, authenticated;
 grant usage, select on sequence public.shopping_items_id_seq to anon, authenticated;
