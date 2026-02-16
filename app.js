@@ -46,9 +46,11 @@ const micStatus  = document.getElementById("mic-status");
 const imageViewer = document.getElementById("image-viewer");
 const imageViewerImg = document.getElementById("image-viewer-img");
 const btnImageViewerClose = document.getElementById("btn-image-viewer-close");
+const helpViewer = document.getElementById("help-viewer");
+const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.38";
+const APP_VERSION = "1.0.39";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -174,7 +176,8 @@ function applySyncCode(code, shouldReload = true) {
         return;
     }
     if (isReservedSyncCode(normalized)) {
-        setAuthStatus("Code 0000 ist fuer Anleitung reserviert. Bitte anderen Code verwenden.");
+        openHelpViewer();
+        setAuthStatus("Code 0000 oeffnet die Kurzanleitung.");
         if (syncCodeInput) syncCodeInput.value = currentSyncCode || "";
         return;
     }
@@ -860,6 +863,16 @@ function closeImageViewer() {
     imageViewerImg.src = "";
 }
 
+function openHelpViewer() {
+    if (!helpViewer) return;
+    helpViewer.hidden = false;
+}
+
+function closeHelpViewer() {
+    if (!helpViewer) return;
+    helpViewer.hidden = true;
+}
+
 async function addPhotoAsListItem(file) {
     if (!file) return;
     if (btnPhotoOcr) btnPhotoOcr.disabled = true;
@@ -907,6 +920,12 @@ if (btnImageViewerClose) btnImageViewerClose.onclick = closeImageViewer;
 if (imageViewer) {
     imageViewer.onclick = event => {
         if (event.target === imageViewer) closeImageViewer();
+    };
+}
+if (btnHelpViewerClose) btnHelpViewerClose.onclick = closeHelpViewer;
+if (helpViewer) {
+    helpViewer.onclick = event => {
+        if (event.target === helpViewer) closeHelpViewer();
     };
 }
 
