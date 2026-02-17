@@ -50,7 +50,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.40";
+const APP_VERSION = "1.0.41";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -116,6 +116,7 @@ let syncEditMode = false;
 let backgroundSyncTimer = null;
 let remoteRealtimeChannel = null;
 let remoteRealtimeTimer = null;
+let pendingPhotoDataUrl = "";
 
 if (authBar) {
     authBar.hidden = true;
@@ -850,12 +851,21 @@ function fokusInputAmEnde() {
 
 function mehrzeilenSpeichern() {
     const text = multiInput.value.trim();
-    if (!text) return;
+    const hasText = Boolean(text);
+    const hasPendingPhoto = Boolean(pendingPhotoDataUrl);
+    if (!hasText && !hasPendingPhoto) return;
 
-    text.split("\n")
-        .map(l => l.trim())
-        .filter(Boolean)
-        .forEach(item => eintragAnlegen(item));
+    if (hasText) {
+        text.split("\n")
+            .map(l => l.trim())
+            .filter(Boolean)
+            .forEach(item => eintragAnlegen(item));
+    }
+
+    if (hasPendingPhoto) {
+        eintragAnlegen(IMAGE_ENTRY_PREFIX + pendingPhotoDataUrl);
+        pendingPhotoDataUrl = "";
+    }
 
     speichern();
     multiInput.value = "";
@@ -880,6 +890,7 @@ multiAdd.onclick = mehrzeilenSpeichern;
 function clearInputBuffer(stopDictation = false) {
     multiInput.value = "";
     autoResize();
+    pendingPhotoDataUrl = "";
 
     finalTranscript = "";
     latestTranscript = "";
@@ -895,9 +906,9 @@ function clearInputBuffer(stopDictation = false) {
     }
 
     if (isListening) {
-        setMicStatus("Eingabe geloescht. Bitte weiter sprechen...");
+        setMicStatus("Eingabe (Text/Foto) geloescht. Bitte weiter sprechen...");
     } else {
-        setMicStatus("Eingabe geloescht.");
+        setMicStatus("Eingabe (Text/Foto) geloescht.");
     }
 }
 
@@ -926,13 +937,12 @@ function closeHelpViewer() {
 async function addPhotoAsListItem(file) {
     if (!file) return;
     if (btnPhotoOcr) btnPhotoOcr.disabled = true;
-    setMicStatus("Foto wird eingefuegt...");
+    setMicStatus("Foto wird geladen...");
 
     try {
         const imageSrc = await readFileAsDataUrl(file);
-        eintragAnlegen(IMAGE_ENTRY_PREFIX + imageSrc);
-        speichern();
-        setMicStatus("Foto zur Liste hinzugefuegt.");
+        pendingPhotoDataUrl = imageSrc;
+        setMicStatus("Foto vorgemerkt. Jetzt Text sprechen/schreiben und mit Übernehmen speichern.");
     } catch (err) {
         console.warn("Foto konnte nicht hinzugefuegt werden:", err);
         setMicStatus("Foto konnte nicht gelesen werden.");
@@ -1105,12 +1115,19 @@ function initRecognition() {
         const spokenText = finalTranscript.trim() || latestTranscript.trim();
 
         if (spokenText) {
-            eintragAnlegen(spokenText);
-            speichern();
-            multiInput.value = "";
+            if (multiInput.value.trim()) {
+                multiInput.value = `${multiInput.value.trim()}\n${spokenText}`;
+            } else {
+                multiInput.value = spokenText;
+            }
             autoResize();
-            multiInput.blur();
-            setMicStatus("Eintrag per Sprache gespeichert.");
+            multiInput.focus();
+            fokusInputAmEnde();
+            if (pendingPhotoDataUrl) {
+                setMicStatus("Text erkannt. Mit Übernehmen werden Text + Foto gespeichert.");
+            } else {
+                setMicStatus("Text erkannt. Mit Übernehmen speichern.");
+            }
             return;
         }
 
