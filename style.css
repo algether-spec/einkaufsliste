@@ -110,6 +110,12 @@ header {
     gap: 8px;
 }
 
+.sync-code-hint {
+    flex-basis: 100%;
+    font-size: 11px;
+    color: #475569;
+}
+
 .sync-code-display {
     min-height: 28px;
     padding: 4px 10px;

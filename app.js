@@ -50,7 +50,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.41";
+const APP_VERSION = "1.0.46";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -170,7 +170,35 @@ function getStoredSyncCode() {
     return created;
 }
 
-function applySyncCode(code, shouldReload = true) {
+async function isSyncCodeOccupied(code) {
+    if (!supabaseClient || !isValidSyncCode(code)) return false;
+    if (!(await ensureSupabaseAuth())) return false;
+
+    const { data, error } = await supabaseClient
+        .from(SUPABASE_TABLE)
+        .select("id")
+        .eq("sync_code", code)
+        .limit(1);
+
+    if (error) throw error;
+    return Array.isArray(data) && data.length > 0;
+}
+
+async function generateAvailableSyncCode(maxAttempts = 25) {
+    for (let i = 0; i < maxAttempts; i += 1) {
+        const candidate = generateSyncCode();
+        try {
+            if (!(await isSyncCodeOccupied(candidate))) return candidate;
+        } catch (err) {
+            console.warn("Freien Code konnte nicht online geprueft werden:", err);
+            return candidate;
+        }
+    }
+    return generateSyncCode();
+}
+
+async function applySyncCode(code, shouldReload = true, options = {}) {
+    const allowOccupied = options.allowOccupied !== false;
     const normalized = normalizeSyncCode(code);
     if (!isValidSyncCode(normalized)) {
         setAuthStatus("Bitte 4-stelligen Zahlencode eingeben.");
@@ -181,6 +209,24 @@ function applySyncCode(code, shouldReload = true) {
         setAuthStatus("Code 0000 oeffnet die Kurzanleitung.");
         if (syncCodeInput) syncCodeInput.value = currentSyncCode || "";
         return;
+    }
+
+    if (!allowOccupied && normalized !== currentSyncCode) {
+        try {
+            if (await isSyncCodeOccupied(normalized)) {
+                setAuthStatus("Code ist bereits belegt. Bitte anderen Code nutzen.");
+                if (syncCodeInput) {
+                    syncCodeInput.value = currentSyncCode || "";
+                    syncCodeInput.focus();
+                    syncCodeInput.select();
+                }
+                return;
+            }
+        } catch (err) {
+            console.warn("Code-Pruefung fehlgeschlagen:", err);
+            setAuthStatus(getSyncErrorHint(err));
+            return;
+        }
     }
 
     currentSyncCode = normalized;
@@ -212,8 +258,7 @@ function setSyncEditMode(enabled) {
 function setupSyncCodeUi() {
     if (!authBar) return;
 
-    applySyncCode(getStoredSyncCode(), false);
-    if (syncStatus) syncStatus.hidden = true;
+    void applySyncCode(getStoredSyncCode(), false);
     setSyncEditMode(false);
 
     if (!hasSupabaseCredentials) {
@@ -223,11 +268,15 @@ function setupSyncCodeUi() {
     }
 
     if (btnSyncApply) {
-        btnSyncApply.onclick = () => applySyncCode(syncCodeInput?.value || "");
+        btnSyncApply.onclick = () => void applySyncCode(syncCodeInput?.value || "", true, { allowOccupied: true });
     }
 
     if (btnSyncNew) {
-        btnSyncNew.onclick = () => applySyncCode(generateSyncCode());
+        btnSyncNew.onclick = () =>
+            void (async () => {
+                const newCode = await generateAvailableSyncCode();
+                await applySyncCode(newCode, true, { allowOccupied: false });
+            })();
     }
 
     if (btnSyncCodeEdit) {
@@ -577,7 +626,8 @@ async function ladenRemote() {
     }));
 }
 
-async function speichernRemote(daten) {
+async function speichernRemote(daten, options = {}) {
+    const allowRemoteDeletes = options.allowRemoteDeletes === true;
     if (!supabaseClient) return;
     if (!(await ensureSupabaseAuth())) return;
 
@@ -615,7 +665,7 @@ async function speichernRemote(daten) {
     const remoteItemIds = (remoteRows || []).map(row => String(row.item_id || "").trim()).filter(Boolean);
     const obsoleteItemIds = remoteItemIds.filter(itemId => !localItemIdSet.has(itemId));
 
-    if (obsoleteItemIds.length > 0) {
+    if (allowRemoteDeletes && obsoleteItemIds.length > 0) {
         const { error: deleteObsoleteError } = await supabaseClient
             .from(SUPABASE_TABLE)
             .delete()
@@ -660,7 +710,7 @@ async function syncRemoteIfNeeded(forceOverwrite = false) {
                 }
             }
 
-            await speichernRemote(datenZumSpeichern);
+            await speichernRemote(datenZumSpeichern, { allowRemoteDeletes: overwriteThisRun });
         } while (remoteSyncQueued);
         lastSyncAt = formatTimeIso(new Date());
         setSyncStatus("Sync: Verbunden", "ok");
