@@ -121,7 +121,12 @@ header {
 .sync-code-hint {
     flex-basis: 100%;
     font-size: 11px;
-    color: #475569;
+    color: #9a3412;
+    background: #fff7ed;
+    border: 1px solid #fdba74;
+    border-radius: 8px;
+    padding: 4px 6px;
+    font-weight: 700;
 }
 
 .sync-code-display {
