@@ -19,7 +19,7 @@ window.addEventListener("load", () => {
 const liste = document.getElementById("liste");
 
 const btnErfassen  = document.getElementById("btnErfassen");
-const btnEinkaufen = document.getElementById("btnEinkaufen");
+const btnErledigt = document.getElementById("btnErledigt");
 const btnExport    = document.getElementById("btnExport");
 const btnForceUpdate = document.getElementById("btn-force-update");
 const syncCodeCompact = document.getElementById("sync-code-compact");
@@ -50,42 +50,21 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.60";
+const APP_VERSION = "1.0.0";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
-const STORAGE_KEY = "einkaufsliste";
+const STORAGE_KEY = "erinnerungen";
+const LEGACY_STORAGE_KEY = "einkaufsliste";
 const SUPABASE_TABLE = "shopping_items";
 const SUPABASE_CODES_TABLE = "sync_codes";
-const SYNC_CODE_KEY = "einkaufsliste-sync-code";
+const SYNC_CODE_KEY = "erinnerungen-sync-code";
+const LEGACY_SYNC_CODE_KEY = "einkaufsliste-sync-code";
 const IMAGE_ENTRY_PREFIX = "__IMG__:";
 const SYNC_CODE_LENGTH = 4;
 const RESERVED_SYNC_CODE = "0000";
 const BACKGROUND_SYNC_INTERVAL_MS = 4000;
 const AUTO_UPDATE_CHECK_INTERVAL_MS = 60000;
-const GROUP_DEFINITIONS = {
-    obst_gemuese: ["apfel", "banane", "birne", "zitrone", "orange", "traube", "beere", "salat", "gurke", "tomate", "paprika", "zucchini", "kartoffel", "zwiebel", "knoblauch", "karotte", "mohrrube", "brokkoli", "blumenkohl", "pilz", "avocado"],
-    backen: ["brot", "broetchen", "toast", "mehl", "hefe", "backpulver", "zucker", "vanille", "kuchen", "croissant"],
-    fleisch_fisch: ["fleisch", "huhn", "haehnchen", "pute", "rind", "schwein", "hack", "wurst", "schinken", "salami", "speck", "fisch", "lachs", "thunfisch"],
-    milch_eier: ["milch", "joghurt", "quark", "kaese", "butter", "sahne", "ei", "frischkaese", "mozzarella", "parmesan"],
-    tiefkuehl: ["tk", "tiefkuehl", "pizza", "pommes", "eis", "gemuese mix", "beeren mix"],
-    trockenwaren: ["nudel", "reis", "linsen", "bohnen", "konserve", "dose", "tomatenmark", "sauce", "bruehe", "muessli", "haferflocken"],
-    getraenke: ["wasser", "saft", "cola", "fanta", "sprite", "bier", "wein", "kaffee", "tee"],
-    drogerie: ["toilettenpapier", "kuechenrolle", "spuelmittel", "waschmittel", "seife", "shampoo", "zahnpasta", "deo", "muellbeutel"]
-};
-const DEFAULT_GROUP_ORDER = [
-    "obst_gemuese",
-    "backen",
-    "fleisch_fisch",
-    "milch_eier",
-    "tiefkuehl",
-    "trockenwaren",
-    "getraenke",
-    "drogerie"
-];
-const GROUP_ORDER = Array.isArray(APP_CONFIG.storeGroupOrder)
-    ? APP_CONFIG.storeGroupOrder.filter(name => Array.isArray(GROUP_DEFINITIONS[name]))
-    : DEFAULT_GROUP_ORDER;
 const hasSupabaseCredentials = Boolean(
     APP_CONFIG.supabaseUrl && APP_CONFIG.supabaseAnonKey
 );
@@ -137,6 +116,22 @@ function setSyncStatus(text, tone = "offline") {
     syncStatus.textContent = text;
     syncStatus.classList.remove("ok", "warn", "offline");
     syncStatus.classList.add(tone);
+}
+
+function migrateLegacyLocalStorageKeys() {
+    const currentList = localStorage.getItem(STORAGE_KEY);
+    const legacyList = localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (!currentList && legacyList) {
+        localStorage.setItem(STORAGE_KEY, legacyList);
+        localStorage.removeItem(LEGACY_STORAGE_KEY);
+    }
+
+    const currentSyncCode = localStorage.getItem(SYNC_CODE_KEY);
+    const legacySyncCode = localStorage.getItem(LEGACY_SYNC_CODE_KEY);
+    if (!currentSyncCode && legacySyncCode) {
+        localStorage.setItem(SYNC_CODE_KEY, legacySyncCode);
+        localStorage.removeItem(LEGACY_SYNC_CODE_KEY);
+    }
 }
 
 function setAuthStatus(text) {
@@ -315,13 +310,30 @@ function normalizeListData(daten) {
     if (!Array.isArray(daten)) return [];
     const seenItemIds = new Set();
     return daten
-        .map((e, index) => ({
-            itemId: String(e?.itemId || e?.item_id || "").trim(),
-            text: String(e?.text || "").trim(),
-            erledigt: Boolean(e?.erledigt),
-            position: Number.isFinite(e?.position) ? e.position : index
-        }))
-        .filter(e => e.text.length > 0)
+        .map((e, index) => {
+            const itemId = String(e?.itemId || e?.item_id || "").trim();
+            const text = String(e?.text || e?.title || "").trim();
+            const title = String(e?.title || text).trim();
+            const note = String(e?.note || "").trim();
+            const createdAt =
+                normalizeDateIso(e?.createdAt || e?.created_at)
+                || extractDateFromItemId(itemId);
+            const entryDate =
+                normalizeDateIso(e?.entryDate || e?.entry_date || e?.createdAt || e?.created_at)
+                || createdAt;
+
+            return {
+                itemId,
+                text: text || title,
+                title: title || text,
+                note,
+                erledigt: Boolean(e?.erledigt),
+                createdAt,
+                entryDate,
+                position: Number.isFinite(e?.position) ? e.position : index
+            };
+        })
+        .filter(e => (e.text || e.title).length > 0)
         .map(e => {
             let itemId = e.itemId || generateItemId();
             if (seenItemIds.has(itemId)) itemId = generateItemId();
@@ -336,38 +348,67 @@ function listDataSignature(daten) {
         normalizeListData(daten).map(e => ({
             itemId: e.itemId,
             text: e.text.toLowerCase(),
+            title: e.title.toLowerCase(),
+            note: e.note.toLowerCase(),
             erledigt: e.erledigt,
+            createdAt: e.createdAt || "",
+            entryDate: e.entryDate || "",
             position: e.position
         }))
     );
 }
 
 function generateItemId() {
-    if (window.crypto?.randomUUID) return window.crypto.randomUUID();
-    return `item-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    return `item-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function normalizeForGroupMatch(text) {
-    return String(text || "")
-        .toLowerCase()
-        .replace(/ä/g, "ae")
-        .replace(/ö/g, "oe")
-        .replace(/ü/g, "ue")
-        .replace(/ß/g, "ss");
+function normalizeDateIso(input) {
+    if (!input) return "";
+    const parsedMs = Date.parse(String(input));
+    if (!Number.isFinite(parsedMs)) return "";
+    return new Date(parsedMs).toISOString();
 }
 
-function getGroupIndex(text) {
-    if (String(text || "").startsWith(IMAGE_ENTRY_PREFIX)) return GROUP_ORDER.length + 1;
-    const normalized = normalizeForGroupMatch(text);
-    for (let i = 0; i < GROUP_ORDER.length; i += 1) {
-        const groupName = GROUP_ORDER[i];
-        const patterns = GROUP_DEFINITIONS[groupName] || [];
-        if (patterns.some(pattern => normalized.includes(pattern))) return i;
+function extractDateFromItemId(itemId) {
+    const match = String(itemId || "").match(/^item-(\d{13})-[a-z0-9]+$/i);
+    if (!match) return "";
+    const parsedMs = Number(match[1]);
+    if (!Number.isFinite(parsedMs)) return "";
+    return new Date(parsedMs).toISOString();
+}
+
+function formatEntryDate(createdAt) {
+    const iso = normalizeDateIso(createdAt);
+    if (!iso) return "";
+
+    try {
+        const d = new Date(iso);
+        const day = String(d.getDate()).padStart(2, "0");
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        return `${day}.${month}.`;
+    } catch {
+        return iso.slice(0, 10);
     }
-    return GROUP_ORDER.length;
 }
 
-function sortListByStoreGroups() {
+function entryLabelFromData(entryLike) {
+    const text = String(entryLike?.text || entryLike?.title || "").trim();
+    const note = String(entryLike?.note || "").trim();
+    if (!text || text.startsWith(IMAGE_ENTRY_PREFIX)) return text;
+    return note ? `${text} — ${note}` : text;
+}
+
+function getEntryTimestamp(entryLike) {
+    const fromEntryDate = normalizeDateIso(entryLike?.entryDate || entryLike?.entry_date);
+    if (fromEntryDate) return Date.parse(fromEntryDate);
+    const fromCreatedAt = normalizeDateIso(entryLike?.createdAt || entryLike?.created_at);
+    if (fromCreatedAt) return Date.parse(fromCreatedAt);
+    const fromItemId = extractDateFromItemId(entryLike?.itemId || entryLike?.item_id);
+    if (fromItemId) return Date.parse(fromItemId);
+    return 0;
+}
+
+function sortListByReminderDate() {
     const daten = normalizeListData(datenAusListeLesen());
     if (!daten.length) return false;
 
@@ -375,16 +416,22 @@ function sortListByStoreGroups() {
     const erledigte = daten.filter(e => e.erledigt);
     const collator = new Intl.Collator("de", { sensitivity: "base" });
 
-    offene.sort((a, b) => {
-        const groupDiff = getGroupIndex(a.text) - getGroupIndex(b.text);
-        if (groupDiff !== 0) return groupDiff;
-        return collator.compare(a.text, b.text);
-    });
+    const sortFn = (a, b) => {
+        const tsDiff = getEntryTimestamp(b) - getEntryTimestamp(a);
+        if (tsDiff !== 0) return tsDiff;
+        return collator.compare(entryLabelFromData(a), entryLabelFromData(b));
+    };
+    offene.sort(sortFn);
+    erledigte.sort(sortFn);
 
     const sortierte = [...offene, ...erledigte].map((e, index) => ({
         itemId: e.itemId,
         text: e.text,
+        title: e.title,
+        note: e.note,
         erledigt: e.erledigt,
+        createdAt: e.createdAt || "",
+        entryDate: e.entryDate || e.createdAt || "",
         position: index
     }));
 
@@ -402,13 +449,31 @@ function mergeListConflict(localDaten, remoteDaten) {
     for (const item of local) {
         if (seenById.has(item.itemId)) continue;
         seenById.add(item.itemId);
-        merged.push({ itemId: item.itemId, text: item.text, erledigt: item.erledigt, position: merged.length });
+        merged.push({
+            itemId: item.itemId,
+            text: item.text,
+            title: item.title,
+            note: item.note,
+            erledigt: item.erledigt,
+            createdAt: item.createdAt || "",
+            entryDate: item.entryDate || item.createdAt || "",
+            position: merged.length
+        });
     }
 
     for (const item of remote) {
         if (seenById.has(item.itemId)) continue;
         seenById.add(item.itemId);
-        merged.push({ itemId: item.itemId, text: item.text, erledigt: item.erledigt, position: merged.length });
+        merged.push({
+            itemId: item.itemId,
+            text: item.text,
+            title: item.title,
+            note: item.note,
+            erledigt: item.erledigt,
+            createdAt: item.createdAt || "",
+            entryDate: item.entryDate || item.createdAt || "",
+            position: merged.length
+        });
     }
 
     return merged;
@@ -457,7 +522,7 @@ async function forceAppUpdate() {
             const keys = await caches.keys();
             await Promise.all(
                 keys
-                    .filter(key => key.startsWith("einkaufsliste-"))
+                    .filter(key => key.startsWith("erinnerungen-") || key.startsWith("einkaufsliste-"))
                     .map(key => caches.delete(key))
             );
         }
@@ -639,11 +704,23 @@ function datenAusListeLesen() {
 
     liste.querySelectorAll("li").forEach((li, index) => {
         const itemId = String(li.dataset.itemId || "").trim() || generateItemId();
+        const createdAt = normalizeDateIso(li.dataset.createdAt) || extractDateFromItemId(itemId) || new Date().toISOString();
+        const entryDate = normalizeDateIso(li.dataset.entryDate || li.dataset.createdAt) || createdAt;
+        const title = String(li.dataset.title || li.dataset.rawText || li.dataset.text || "").trim();
+        const note = String(li.dataset.note || "").trim();
         li.dataset.itemId = itemId;
+        li.dataset.createdAt = createdAt;
+        li.dataset.entryDate = entryDate;
+        li.dataset.title = title;
+        li.dataset.note = note;
         daten.push({
             itemId,
-            text: li.dataset.rawText || li.dataset.text || "",
+            text: li.dataset.rawText || li.dataset.text || title,
+            title,
+            note,
             erledigt: li.classList.contains("erledigt"),
+            createdAt,
+            entryDate,
             position: index
         });
     });
@@ -653,7 +730,7 @@ function datenAusListeLesen() {
 
 function datenInListeSchreiben(daten) {
     liste.innerHTML = "";
-    daten.forEach(e => eintragAnlegen(e.text, e.erledigt, e.itemId));
+    daten.forEach(e => eintragAnlegen(e));
 }
 
 function speichernLokal(daten) {
@@ -670,11 +747,17 @@ function ladenLokal() {
         return parsed
             .map((e, index) => ({
                 itemId: String(e.itemId || e.item_id || "").trim() || generateItemId(),
-                text: String(e.text || ""),
+                text: String(e.text || e.title || ""),
+                title: String(e.title || e.text || ""),
+                note: String(e.note || ""),
                 erledigt: Boolean(e.erledigt),
+                createdAt: normalizeDateIso(e.createdAt || e.created_at) || extractDateFromItemId(e.itemId || e.item_id),
+                entryDate:
+                    normalizeDateIso(e.entryDate || e.entry_date || e.createdAt || e.created_at)
+                    || extractDateFromItemId(e.itemId || e.item_id),
                 position: Number.isFinite(e.position) ? e.position : index
             }))
-            .filter(e => e.text.trim().length > 0);
+            .filter(e => (e.text || e.title).trim().length > 0);
     } catch (err) {
         console.warn("Fehler beim lokalen Laden:", err);
         return [];
@@ -697,7 +780,11 @@ async function ladenRemote() {
     return data.map((e, index) => ({
         itemId: String(e.item_id || "").trim() || generateItemId(),
         text: String(e.text || ""),
+        title: String(e.text || ""),
+        note: "",
         erledigt: Boolean(e.erledigt),
+        createdAt: extractDateFromItemId(e.item_id),
+        entryDate: extractDateFromItemId(e.item_id),
         position: Number.isFinite(e.position) ? e.position : index
     }));
 }
@@ -720,7 +807,7 @@ async function speichernRemote(daten, options = {}) {
     const payload = daten.map((e, index) => ({
         sync_code: currentSyncCode,
         item_id: String(e.itemId || "").trim() || generateItemId(),
-        text: e.text,
+        text: String(e.text || e.title || ""),
         erledigt: e.erledigt,
         position: index
     }));
@@ -904,12 +991,27 @@ async function laden() {
    EINTRÄGE
 ====================== */
 
-function eintragAnlegen(text, erledigt = false, itemId = generateItemId()) {
+function eintragAnlegen(text, erledigt = false, itemId = generateItemId(), createdAt = "") {
     const li = document.createElement("li");
-    const rawText = String(text || "");
-    li.dataset.itemId = String(itemId || "").trim() || generateItemId();
+    const inputIsObject = typeof text === "object" && text !== null;
+    const rawText = String(inputIsObject ? (text.text || text.title || "") : (text || ""));
+    const entryTitle = String(inputIsObject ? (text.title || rawText) : rawText).trim();
+    const entryNote = String(inputIsObject ? (text.note || "") : "").trim();
+    const inputItemId = inputIsObject ? text.itemId : itemId;
+    const inputCreatedAt = inputIsObject ? (text.createdAt || text.entryDate) : createdAt;
+    const normalizedItemId = String(inputItemId || "").trim() || generateItemId();
+    const normalizedCreatedAt =
+        normalizeDateIso(inputCreatedAt) || extractDateFromItemId(normalizedItemId) || new Date().toISOString();
+    const normalizedEntryDate =
+        normalizeDateIso(inputIsObject ? (text.entryDate || text.createdAt) : createdAt)
+        || normalizedCreatedAt;
+    li.dataset.itemId = normalizedItemId;
     li.dataset.rawText = rawText;
     li.dataset.text = rawText;
+    li.dataset.title = entryTitle;
+    li.dataset.note = entryNote;
+    li.dataset.createdAt = normalizedCreatedAt;
+    li.dataset.entryDate = normalizedEntryDate;
 
     if (rawText.startsWith(IMAGE_ENTRY_PREFIX)) {
         const imageSrc = rawText.slice(IMAGE_ENTRY_PREFIX.length);
@@ -951,13 +1053,33 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId()) {
         wrapper.appendChild(deleteBtn);
         li.appendChild(wrapper);
     } else {
-        li.textContent = rawText;
+        const textWrap = document.createElement("span");
+        textWrap.className = "list-item-text";
+
+        const titleSpan = document.createElement("span");
+        titleSpan.className = "list-item-title";
+        titleSpan.textContent = entryTitle;
+        textWrap.appendChild(titleSpan);
+
+        if (entryNote) {
+            const noteSpan = document.createElement("span");
+            noteSpan.className = "list-item-note";
+            noteSpan.textContent = entryNote;
+            textWrap.appendChild(noteSpan);
+        }
+
+        li.appendChild(textWrap);
     }
+
+    const dateSpan = document.createElement("span");
+    dateSpan.className = "list-item-date";
+    dateSpan.textContent = formatEntryDate(normalizedEntryDate);
+    li.appendChild(dateSpan);
 
     if (erledigt) li.classList.add("erledigt");
 
     li.onclick = () => {
-        if (modus !== "einkaufen") return;
+        if (modus !== "erledigt") return;
 
         li.classList.toggle("erledigt");
         speichern();
@@ -1339,9 +1461,9 @@ function setModus(neu) {
     modus = neu;
 
     btnErfassen.classList.toggle("active", modus === "erfassen");
-    btnEinkaufen.classList.toggle("active", modus === "einkaufen");
-    if (modeBadge) modeBadge.textContent = modus === "einkaufen" ? "Einkaufen" : "Erfassen";
-    document.body.classList.toggle("modus-einkaufen", modus === "einkaufen");
+    btnErledigt.classList.toggle("active", modus === "erledigt");
+    if (modeBadge) modeBadge.textContent = modus === "erledigt" ? "Erledigt" : "Erfassen";
+    document.body.classList.toggle("modus-erledigt", modus === "erledigt");
     if (syncCodeCompact) syncCodeCompact.hidden = modus !== "erfassen";
     if (authBar) {
         const showAuthBar = modus === "erfassen" && syncEditMode;
@@ -1349,18 +1471,18 @@ function setModus(neu) {
         authBar.classList.toggle("is-hidden", !showAuthBar);
     }
 
-    if (vorher !== "einkaufen" && neu === "einkaufen") {
-        if (sortListByStoreGroups()) speichern();
+    if (vorher !== "erfassen" && neu === "erledigt") {
+        if (sortListByReminderDate()) speichern();
     }
 
-    if (vorher === "einkaufen" && neu === "erfassen") {
+    if (vorher === "erledigt" && neu === "erfassen") {
         liste.querySelectorAll("li.erledigt").forEach(li => li.remove());
         speichern(true);
     }
 }
 
 btnErfassen.onclick  = () => setModus("erfassen");
-btnEinkaufen.onclick = () => setModus("einkaufen");
+btnErledigt.onclick = () => setModus("erledigt");
 
 
 /* ======================
@@ -1371,21 +1493,23 @@ btnExport.onclick = async () => {
     const text = [...liste.querySelectorAll("li")]
         .map(li => {
             const raw = String(li.dataset.rawText || li.dataset.text || "");
-            const label = raw.startsWith(IMAGE_ENTRY_PREFIX) ? "[Foto]" : raw;
+            const title = String(li.dataset.title || raw).trim();
+            const note = String(li.dataset.note || "").trim();
+            const label = raw.startsWith(IMAGE_ENTRY_PREFIX) ? "[Foto]" : (note ? `${title} — ${note}` : title);
             return (li.classList.contains("erledigt") ? "✔ " : "• ") + label;
         })
         .join("\n");
 
     if (navigator.share) {
         try {
-            await navigator.share({ title: "Einkaufsliste", text });
+            await navigator.share({ title: "Erinnerungen", text });
             return;
         } catch {}
     }
 
     if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(text);
-        alert("Liste kopiert.");
+        alert("Erinnerungen kopiert.");
     } else {
         alert(text);
     }
@@ -1399,6 +1523,7 @@ btnExport.onclick = async () => {
 setModus("erfassen");
 if (versionBadge) versionBadge.textContent = "v" + APP_VERSION;
 updateSyncDebug();
+migrateLegacyLocalStorageKeys();
 
 if (btnMic && !SpeechRecognitionCtor) {
     btnMic.disabled = true;

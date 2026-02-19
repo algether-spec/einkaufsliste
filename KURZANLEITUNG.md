@@ -1,4 +1,4 @@
-# Einkaufsliste App – Kurzanleitung
+# Erinnerungen App – Kurzanleitung
 
 ## 1) App starten
 - App als PWA auf dem Handy installieren und als App starten (wichtig für die Mikrofonfunktion).
@@ -9,18 +9,18 @@
 - Achtung: `0000` ist reserviert und nicht nutzbar.
 - Nach dem Setzen sollten beide Geräte dieselbe Liste sehen.
 
-## 3) Artikel hinzufügen (Text)
-- In das Feld `Jede Zeile = ein Artikel` schreiben.
-- Mehrere Zeilen = mehrere Artikel.
+## 3) Erinnerungen hinzufügen (Text)
+- In das Feld `Jede Zeile = eine Erinnerung` schreiben.
+- Mehrere Zeilen = mehrere Erinnerungen.
 - Mit `Übernehmen` speichern.
 
-## 4) Artikel hinzufügen (Sprache)
+## 4) Erinnerungen hinzufügen (Sprache)
 - Auf `🎤` tippen und sprechen.
 - Erkannter Text landet im Eingabefeld.
 - Mit `Übernehmen` speichern.
 - Hinweis: HTTPS und Mikrofonfreigabe sind erforderlich.
 
-## 5) Artikel hinzufügen (Bild/Foto)
+## 5) Erinnerungen hinzufügen (Bild/Foto)
 - Auf `Foto` tippen und ein Bild auswählen.
 - Das Foto wird sofort als eigener Listeneintrag gespeichert.
 - Optional kannst du danach zusätzlich Text eingeben und mit `Übernehmen` speichern.
@@ -30,9 +30,9 @@
 - Fotos werden sofort gespeichert.
 - Text/Sprache wird mit `Übernehmen` gespeichert.
 
-## 7) Beim Einkaufen abhaken
-- Unten auf `Einkaufen` wechseln.
-- Artikel antippen = erledigt.
+## 7) Erledigte abhaken
+- Unten auf `Erledigt` wechseln.
+- Eintrag antippen = erledigt.
 - Beim Wechsel zurück zu `Erfassen` werden erledigte Einträge entfernt.
 
 ## 8) Weitere Buttons
