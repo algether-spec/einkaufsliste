@@ -330,6 +330,7 @@ button:disabled {
     color: #0f172a;
     font-size: 12px;
     font-weight: 700;
+    margin-left: auto;
 }
 
 .sync-status {
