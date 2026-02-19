@@ -50,7 +50,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.47";
+const APP_VERSION = "1.0.48";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -375,23 +375,16 @@ function mergeListConflict(localDaten, remoteDaten) {
     const remote = normalizeListData(remoteDaten);
     const merged = [];
     const seenById = new Set();
-    const seenByText = new Set();
 
     for (const item of local) {
-        const textKey = item.text.toLowerCase();
         if (seenById.has(item.itemId)) continue;
-        if (seenByText.has(textKey)) continue;
         seenById.add(item.itemId);
-        seenByText.add(textKey);
         merged.push({ itemId: item.itemId, text: item.text, erledigt: item.erledigt, position: merged.length });
     }
 
     for (const item of remote) {
-        const textKey = item.text.toLowerCase();
         if (seenById.has(item.itemId)) continue;
-        if (seenByText.has(textKey)) continue;
         seenById.add(item.itemId);
-        seenByText.add(textKey);
         merged.push({ itemId: item.itemId, text: item.text, erledigt: item.erledigt, position: merged.length });
     }
 
