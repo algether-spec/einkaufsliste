@@ -22,14 +22,13 @@
 
 ## 5) Artikel hinzufügen (Bild/Foto)
 - Auf `Foto` tippen und ein Bild auswählen.
-- Das Foto wird vorgemerkt.
-- Danach optional Text schreiben/sprechen.
-- Mit `Übernehmen` werden Foto + Text gemeinsam gespeichert.
+- Das Foto wird sofort als eigener Listeneintrag gespeichert.
+- Optional kannst du danach zusätzlich Text eingeben und mit `Übernehmen` speichern.
 
 ## 6) Kombinationen (Text + Sprache + Bild)
 - Du kannst die Eingabearten mischen: erst Foto, dann sprechen oder schreiben.
-- Alles, was im Eingabefeld steht plus vorgemerktes Foto, wird mit `Übernehmen` gemeinsam gespeichert.
-- Wenn nur Text/Sprache eingegeben ist, wird nur der Text gespeichert.
+- Fotos werden sofort gespeichert.
+- Text/Sprache wird mit `Übernehmen` gespeichert.
 
 ## 7) Beim Einkaufen abhaken
 - Unten auf `Einkaufen` wechseln.
