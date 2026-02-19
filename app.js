@@ -50,7 +50,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.57";
+const APP_VERSION = "1.0.58";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -61,6 +61,7 @@ const IMAGE_ENTRY_PREFIX = "__IMG__:";
 const SYNC_CODE_LENGTH = 4;
 const RESERVED_SYNC_CODE = "0000";
 const BACKGROUND_SYNC_INTERVAL_MS = 4000;
+const AUTO_UPDATE_CHECK_INTERVAL_MS = 60000;
 const GROUP_DEFINITIONS = {
     obst_gemuese: ["apfel", "banane", "birne", "zitrone", "orange", "traube", "beere", "salat", "gurke", "tomate", "paprika", "zucchini", "kartoffel", "zwiebel", "knoblauch", "karotte", "mohrrube", "brokkoli", "blumenkohl", "pilz", "avocado"],
     backen: ["brot", "broetchen", "toast", "mehl", "hefe", "backpulver", "zucker", "vanille", "kuchen", "croissant"],
@@ -117,6 +118,8 @@ let syncEditMode = false;
 let backgroundSyncTimer = null;
 let remoteRealtimeChannel = null;
 let remoteRealtimeTimer = null;
+let autoUpdateCheckTimer = null;
+let autoUpdateInProgress = false;
 
 if (authBar) {
     authBar.hidden = true;
@@ -456,6 +459,66 @@ async function forceAppUpdate() {
         setAuthStatus("Update fehlgeschlagen. Bitte Seite neu laden.");
         if (btnForceUpdate) btnForceUpdate.disabled = false;
     }
+}
+
+function hasActiveEditingState() {
+    return Boolean(
+        isListening
+        || (multiInput && multiInput.value.trim().length > 0)
+        || localDirty
+        || remoteSyncInFlight
+    );
+}
+
+async function hasWaitingServiceWorkerUpdate() {
+    if (!("serviceWorker" in navigator)) return false;
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    for (const registration of registrations) {
+        await registration.update();
+        if (registration.waiting) return true;
+    }
+    return false;
+}
+
+async function maybeAutoUpdate(trigger = "auto") {
+    if (autoUpdateInProgress) return;
+
+    try {
+        const hasUpdate = await hasWaitingServiceWorkerUpdate();
+        if (!hasUpdate) return;
+
+        if (hasActiveEditingState()) {
+            setSyncStatus("Update verfuegbar", "warn");
+            setAuthStatus("Neue Version erkannt. Bei Leerlauf wird automatisch aktualisiert.");
+            return;
+        }
+
+        autoUpdateInProgress = true;
+        setAuthStatus(`Neue Version erkannt (${trigger}). Update startet...`);
+        await forceAppUpdate();
+    } catch (err) {
+        console.warn("Auto-Update-Pruefung fehlgeschlagen:", err);
+    } finally {
+        autoUpdateInProgress = false;
+    }
+}
+
+function setupAutoUpdateChecks() {
+    if (!("serviceWorker" in navigator)) return;
+    if (autoUpdateCheckTimer) clearInterval(autoUpdateCheckTimer);
+
+    autoUpdateCheckTimer = setInterval(() => {
+        if (document.hidden) return;
+        void maybeAutoUpdate("interval");
+    }, AUTO_UPDATE_CHECK_INTERVAL_MS);
+
+    window.addEventListener("focus", () => void maybeAutoUpdate("focus"));
+    window.addEventListener("online", () => void maybeAutoUpdate("online"));
+    document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) void maybeAutoUpdate("visible");
+    });
+
+    void maybeAutoUpdate("startup");
 }
 
 function updateSyncDebug() {
@@ -1325,6 +1388,7 @@ if (btnMic && !SpeechRecognitionCtor) {
 
 setupSyncCodeUi();
 if (btnForceUpdate) btnForceUpdate.onclick = () => void forceAppUpdate();
+setupAutoUpdateChecks();
 
 if (supabaseClient) {
     startBackgroundSync();
