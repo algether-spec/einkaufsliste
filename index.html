@@ -23,7 +23,7 @@
     <!-- Service Worker -->
     <script>
         if ("serviceWorker" in navigator) {
-            navigator.serviceWorker.register("service-worker.js");
+            navigator.serviceWorker.register("service-worker.js", { updateViaCache: "none" });
         }
     </script>
 </head>
@@ -135,7 +135,7 @@
     </div>
 
     <div class="version-row">
-        <div class="version-badge" id="version-badge">v1.0.51</div>
+        <div class="version-badge" id="version-badge">v1.0.52</div>
     </div>
     <div class="sync-status" id="sync-status">Sync: Lokal</div>
     <div class="sync-debug" id="sync-debug" hidden></div>

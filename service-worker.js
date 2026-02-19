@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v1.0.51";
+const CACHE_VERSION = "v1.0.52";
 const CACHE_NAME = "einkaufsliste-" + CACHE_VERSION;
 
 const FILES_TO_CACHE = [
@@ -46,11 +46,26 @@ self.addEventListener("message", event => {
 
 /* FETCH */
 self.addEventListener("fetch", event => {
+  const request = event.request;
+
+  if (request.mode === "navigate") {
+    event.respondWith(
+      fetch(request)
+        .then(response => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put("./index.html", copy)).catch(() => {});
+          return response;
+        })
+        .catch(() => caches.match("./index.html"))
+    );
+    return;
+  }
+
   event.respondWith(
-    caches.match(event.request)
+    caches.match(request)
       .then(response => {
         if (response) return response;
-        return fetch(event.request).catch(() =>
+        return fetch(request).catch(() =>
           caches.match("./index.html")
         );
       })

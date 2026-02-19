@@ -50,7 +50,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.51";
+const APP_VERSION = "1.0.52";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -107,6 +107,7 @@ let remoteSyncInFlight = false;
 let remoteSyncQueued = false;
 let remoteSyncForceOverwrite = false;
 let remotePullInFlight = false;
+let localDirty = false;
 let supabaseReady = false;
 let supabaseUserId = "";
 let lastSyncAt = "";
@@ -714,6 +715,7 @@ async function syncRemoteIfNeeded(forceOverwrite = false) {
             await speichernRemote(datenZumSpeichern, { allowRemoteDeletes: overwriteThisRun });
         } while (remoteSyncQueued);
         lastSyncAt = formatTimeIso(new Date());
+        localDirty = false;
         setSyncStatus("Sync: Verbunden", "ok");
         updateSyncDebug();
     } catch (err) {
@@ -737,6 +739,10 @@ async function refreshFromRemoteIfChanged() {
 
         const normalizedRemote = normalizeListData(remoteDaten);
         const lokaleDaten = normalizeListData(datenAusListeLesen());
+
+        if (localDirty && listDataSignature(normalizedRemote) !== listDataSignature(lokaleDaten)) {
+            return;
+        }
 
         if (listDataSignature(normalizedRemote) !== listDataSignature(lokaleDaten)) {
             datenInListeSchreiben(normalizedRemote);
@@ -776,6 +782,7 @@ function startBackgroundSync() {
 function speichern(forceOverwrite = false) {
     const daten = datenAusListeLesen();
     speichernLokal(daten);
+    localDirty = true;
     void syncRemoteIfNeeded(forceOverwrite);
 }
 
@@ -794,6 +801,7 @@ async function laden() {
         if (remoteDaten && remoteDaten.length > 0) {
             datenInListeSchreiben(remoteDaten);
             speichernLokal(remoteDaten);
+            localDirty = false;
             setSyncStatus("Sync: Verbunden", "ok");
             lastSyncAt = formatTimeIso(new Date());
             updateSyncDebug();
@@ -803,6 +811,7 @@ async function laden() {
         datenInListeSchreiben(lokaleDaten);
         if (lokaleDaten.length > 0) void syncRemoteIfNeeded();
         else {
+            localDirty = false;
             setSyncStatus("Sync: Verbunden", "ok");
             updateSyncDebug();
         }
@@ -812,6 +821,7 @@ async function laden() {
         setAuthStatus(getSyncErrorHint(err));
         updateSyncDebug();
         datenInListeSchreiben(lokaleDaten);
+        localDirty = true;
     }
 }
 
@@ -979,7 +989,8 @@ async function addPhotoAsListItem(file) {
 
     try {
         const imageSrc = await readFileAsDataUrl(file);
-        eintragAnlegen(IMAGE_ENTRY_PREFIX + imageSrc);
+        const optimizedImageSrc = await optimizePhotoDataUrl(imageSrc);
+        eintragAnlegen(IMAGE_ENTRY_PREFIX + optimizedImageSrc);
         speichern();
         if (multiInput?.value?.trim()) {
             setMicStatus("Foto gespeichert. Text bleibt im Feld und kann mit Übernehmen gespeichert werden.");
@@ -1002,6 +1013,36 @@ function readFileAsDataUrl(file) {
         reader.onerror = () => reject(new Error("Datei konnte nicht gelesen werden."));
         reader.readAsDataURL(file);
     });
+}
+
+async function optimizePhotoDataUrl(dataUrl) {
+    if (!String(dataUrl || "").startsWith("data:image/")) return dataUrl;
+
+    try {
+        const image = await new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = () => reject(new Error("Bild konnte nicht geladen werden."));
+            img.src = dataUrl;
+        });
+
+        const maxSide = 1280;
+        const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+        const width = Math.max(1, Math.round(image.width * scale));
+        const height = Math.max(1, Math.round(image.height * scale));
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return dataUrl;
+        ctx.drawImage(image, 0, 0, width, height);
+
+        const compressed = canvas.toDataURL("image/jpeg", 0.78);
+        return compressed.length < dataUrl.length ? compressed : dataUrl;
+    } catch {
+        return dataUrl;
+    }
 }
 
 if (btnClearInput) {
