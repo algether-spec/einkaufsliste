@@ -23,6 +23,8 @@
 ## 5) Hinweis
 - Die Tabelle ist mit Row Level Security (RLS) geschuetzt.
 - Zugriff wird fuer diese Version ueber den Sync-Code gesteuert.
+- Zusaetzlich speichert `sync_codes` dauerhaft, welche Codes schon genutzt wurden (`created_at`, `last_used_at`).
+- Dadurch kann `Neu` belegte Codes zuverlaessiger erkennen, auch wenn eine Liste gerade leer ist.
 
 ## 6) Fehlerbild: "erst Verbunden, dann Offline (lokal)"
 - Ursache ist meist fehlende DB-Berechtigung fuer `anon`/`authenticated` (insb. Sequence bei Insert).

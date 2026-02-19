@@ -50,12 +50,13 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.59";
+const APP_VERSION = "1.0.60";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
 const STORAGE_KEY = "einkaufsliste";
 const SUPABASE_TABLE = "shopping_items";
+const SUPABASE_CODES_TABLE = "sync_codes";
 const SYNC_CODE_KEY = "einkaufsliste-sync-code";
 const IMAGE_ENTRY_PREFIX = "__IMG__:";
 const SYNC_CODE_LENGTH = 4;
@@ -178,13 +179,29 @@ async function isSyncCodeOccupied(code) {
     if (!(await ensureSupabaseAuth())) return false;
 
     const { data, error } = await supabaseClient
-        .from(SUPABASE_TABLE)
-        .select("id")
-        .eq("sync_code", code)
+        .from(SUPABASE_CODES_TABLE)
+        .select("sync_code")
+        .eq("sync_code", String(code))
         .limit(1);
 
     if (error) throw error;
     return Array.isArray(data) && data.length > 0;
+}
+
+async function touchSyncCodeUsage(code) {
+    if (!supabaseClient) return;
+    if (!isValidSyncCode(code)) return;
+    if (isReservedSyncCode(code)) return;
+    if (!(await ensureSupabaseAuth())) return;
+
+    const { error } = await supabaseClient
+        .from(SUPABASE_CODES_TABLE)
+        .upsert(
+            { sync_code: String(code), last_used_at: new Date().toISOString() },
+            { onConflict: "sync_code" }
+        );
+
+    if (error) throw error;
 }
 
 async function generateAvailableSyncCode(maxAttempts = 25) {
@@ -239,6 +256,9 @@ async function applySyncCode(code, shouldReload = true, options = {}) {
     setAuthStatus(`Geraete-Code: ${currentSyncCode}`);
     setSyncEditMode(false);
     if (syncCodeInput) syncCodeInput.blur();
+    void touchSyncCodeUsage(currentSyncCode).catch(err => {
+        console.warn("Code-Nutzung konnte nicht markiert werden:", err);
+    });
     if (supabaseClient) startRealtimeSync();
     updateSyncDebug();
     if (shouldReload) void laden();
