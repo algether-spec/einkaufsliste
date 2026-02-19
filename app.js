@@ -991,8 +991,16 @@ async function addPhotoAsListItem(file) {
 
     try {
         const imageSrc = await readFileAsDataUrl(file);
-        pendingPhotoDataUrl = imageSrc;
-        setMicStatus("Foto vorgemerkt. Jetzt Text sprechen/schreiben und mit Übernehmen speichern.");
+        const hasPreparedText = Boolean(multiInput?.value?.trim());
+        if (hasPreparedText) {
+            pendingPhotoDataUrl = imageSrc;
+            setMicStatus("Foto vorgemerkt. Mit Übernehmen werden Text + Foto gespeichert.");
+        } else {
+            pendingPhotoDataUrl = "";
+            eintragAnlegen(IMAGE_ENTRY_PREFIX + imageSrc);
+            speichern();
+            setMicStatus("Foto zur Liste hinzugefügt.");
+        }
     } catch (err) {
         console.warn("Foto konnte nicht hinzugefuegt werden:", err);
         setMicStatus("Foto konnte nicht gelesen werden.");
