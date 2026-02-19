@@ -50,7 +50,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.53";
+const APP_VERSION = "1.0.54";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -427,26 +427,9 @@ function getSyncErrorHint(err) {
 
 async function forceAppUpdate() {
     if (btnForceUpdate) btnForceUpdate.disabled = true;
-    setSyncStatus("Update: wird geladen...", "warn");
+    setSyncStatus("Update: komplette Neuinstallation...", "warn");
 
     try {
-        if ("serviceWorker" in navigator) {
-            const registrations = await navigator.serviceWorker.getRegistrations();
-            const controllerChangePromise = new Promise(resolve => {
-                const onControllerChange = () => resolve(true);
-                navigator.serviceWorker.addEventListener("controllerchange", onControllerChange, { once: true });
-                setTimeout(() => resolve(false), 3000);
-            });
-
-            for (const registration of registrations) {
-                await registration.update();
-                const waitingWorker = registration.waiting;
-                if (waitingWorker) waitingWorker.postMessage({ type: "SKIP_WAITING" });
-            }
-
-            await controllerChangePromise;
-        }
-
         if ("caches" in window) {
             const keys = await caches.keys();
             await Promise.all(
@@ -455,6 +438,14 @@ async function forceAppUpdate() {
                     .map(key => caches.delete(key))
             );
         }
+
+        if ("serviceWorker" in navigator) {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(registrations.map(registration => registration.unregister()));
+        }
+
+        // Kleine Pause, damit SW-Abmeldung und Cache-Loeschung sicher wirksam sind.
+        await new Promise(resolve => setTimeout(resolve, 180));
 
         const url = new URL(location.href);
         url.searchParams.set("u", String(Date.now()));
