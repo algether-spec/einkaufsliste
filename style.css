@@ -539,6 +539,7 @@ body.modus-einkaufen .input-section {
 /* Navigation */
 nav {
     display: flex;
+    gap: 8px;
     justify-content: space-between;
     background: white;
     border-top: 1px solid #e5e7eb;
@@ -547,24 +548,50 @@ nav {
     position: sticky;
     bottom: 0;
     z-index: 10;
+    padding: 8px;
 }
 
 nav button {
     flex: 1;
-    min-height: 58px;
-    padding: 12px 0;
-    font-size: 18px;
-    font-weight: 600;
-    background: none;
-    border: none;
-    color: #374151;
-    transition: 0.2s;
+    min-height: 56px;
+    padding: 10px 12px;
+    font-size: 19px;
+    font-weight: 700;
+    border: 2px solid #cbd5e1;
+    background: #f8fafc;
+    color: #64748b;
+    transition: background-color 0.16s ease, color 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
 }
 
-nav button.active {
-    color: var(--primary);
-    border-top: 3px solid var(--primary);
-    background: rgba(37, 99, 235, 0.08);
+nav button::before {
+    margin-right: 8px;
+    font-size: 17px;
+}
+
+#btnErfassen::before {
+    content: "✎";
+}
+
+#btnEinkaufen::before {
+    content: "🛒";
+}
+
+#btnErfassen.active {
+    background: #1d4ed8;
+    color: #eff6ff;
+    border-color: #1e40af;
+    box-shadow: 0 6px 14px rgba(29, 78, 216, 0.28);
+}
+
+#btnEinkaufen.active {
+    background: #047857;
+    color: #ecfdf5;
+    border-color: #065f46;
+    box-shadow: 0 6px 14px rgba(4, 120, 87, 0.26);
+}
+
+nav button:not(.active) {
+    opacity: 0.8;
 }
 
 /* Splash Screen */

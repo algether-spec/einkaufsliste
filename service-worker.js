@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v1.0.52";
+const CACHE_VERSION = "v1.0.53";
 const CACHE_NAME = "einkaufsliste-" + CACHE_VERSION;
 
 const FILES_TO_CACHE = [
