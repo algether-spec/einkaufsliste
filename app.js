@@ -50,7 +50,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.48";
+const APP_VERSION = "1.0.50";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -116,7 +116,7 @@ let syncEditMode = false;
 let backgroundSyncTimer = null;
 let remoteRealtimeChannel = null;
 let remoteRealtimeTimer = null;
-let pendingPhotoDataUrl = "";
+let pendingPhotoDataUrls = [];
 
 if (authBar) {
     authBar.hidden = true;
@@ -432,12 +432,19 @@ async function forceAppUpdate() {
     try {
         if ("serviceWorker" in navigator) {
             const registrations = await navigator.serviceWorker.getRegistrations();
+            const controllerChangePromise = new Promise(resolve => {
+                const onControllerChange = () => resolve(true);
+                navigator.serviceWorker.addEventListener("controllerchange", onControllerChange, { once: true });
+                setTimeout(() => resolve(false), 3000);
+            });
+
             for (const registration of registrations) {
                 await registration.update();
-                if (registration.waiting) {
-                    registration.waiting.postMessage({ type: "SKIP_WAITING" });
-                }
+                const waitingWorker = registration.waiting;
+                if (waitingWorker) waitingWorker.postMessage({ type: "SKIP_WAITING" });
             }
+
+            await controllerChangePromise;
         }
 
         if ("caches" in window) {
@@ -449,7 +456,9 @@ async function forceAppUpdate() {
             );
         }
 
-        location.reload();
+        const url = new URL(location.href);
+        url.searchParams.set("u", String(Date.now()));
+        location.replace(url.toString());
     } catch (err) {
         console.warn("Update fehlgeschlagen:", err);
         setSyncStatus("Update fehlgeschlagen", "offline");
@@ -895,7 +904,7 @@ function fokusInputAmEnde() {
 function mehrzeilenSpeichern() {
     const text = multiInput.value.trim();
     const hasText = Boolean(text);
-    const hasPendingPhoto = Boolean(pendingPhotoDataUrl);
+    const hasPendingPhoto = pendingPhotoDataUrls.length > 0;
     if (!hasText && !hasPendingPhoto) return;
 
     if (hasText) {
@@ -906,8 +915,10 @@ function mehrzeilenSpeichern() {
     }
 
     if (hasPendingPhoto) {
-        eintragAnlegen(IMAGE_ENTRY_PREFIX + pendingPhotoDataUrl);
-        pendingPhotoDataUrl = "";
+        for (const photoDataUrl of pendingPhotoDataUrls) {
+            eintragAnlegen(IMAGE_ENTRY_PREFIX + photoDataUrl);
+        }
+        pendingPhotoDataUrls = [];
     }
 
     speichern();
@@ -933,7 +944,7 @@ multiAdd.onclick = mehrzeilenSpeichern;
 function clearInputBuffer(stopDictation = false) {
     multiInput.value = "";
     autoResize();
-    pendingPhotoDataUrl = "";
+    pendingPhotoDataUrls = [];
 
     finalTranscript = "";
     latestTranscript = "";
@@ -986,10 +997,11 @@ async function addPhotoAsListItem(file) {
         const imageSrc = await readFileAsDataUrl(file);
         const hasPreparedText = Boolean(multiInput?.value?.trim());
         if (hasPreparedText) {
-            pendingPhotoDataUrl = imageSrc;
-            setMicStatus("Foto vorgemerkt. Mit Übernehmen werden Text + Foto gespeichert.");
+            pendingPhotoDataUrls.push(imageSrc);
+            const count = pendingPhotoDataUrls.length;
+            setMicStatus(`Foto vorgemerkt (${count}). Mit Übernehmen werden Text + Foto gespeichert.`);
         } else {
-            pendingPhotoDataUrl = "";
+            pendingPhotoDataUrls = [];
             eintragAnlegen(IMAGE_ENTRY_PREFIX + imageSrc);
             speichern();
             setMicStatus("Foto zur Liste hinzugefügt.");
@@ -1174,7 +1186,7 @@ function initRecognition() {
             autoResize();
             multiInput.focus();
             fokusInputAmEnde();
-            if (pendingPhotoDataUrl) {
+            if (pendingPhotoDataUrls.length > 0) {
                 setMicStatus("Text erkannt. Mit Übernehmen werden Text + Foto gespeichert.");
             } else {
                 setMicStatus("Text erkannt. Mit Übernehmen speichern.");
