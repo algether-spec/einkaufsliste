@@ -13,17 +13,17 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
 
     <!-- Styles -->
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=1.0.61">
 
     <!-- Manifest -->
-    <link rel="manifest" href="manifest.json">
+    <link rel="manifest" href="manifest.json?v=1.0.61">
     <link rel="icon" type="image/png" sizes="192x192" href="icon-cart-192.png">
     <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon-180.png">
 
     <!-- Service Worker -->
     <script>
         if ("serviceWorker" in navigator) {
-            navigator.serviceWorker.register("service-worker.js");
+            navigator.serviceWorker.register("service-worker.js?v=1.0.61", { updateViaCache: "none" });
         }
     </script>
 </head>
@@ -39,19 +39,31 @@
 
 <div class="app">
 
-    <header>
-        Einkaufsliste
-        <span class="badge-free">FREE</span>
-    </header>
+    <header>Einkaufsliste</header>
+
+    <div class="sync-code-compact" id="sync-code-compact">
+        Code:
+        <button type="button" id="btn-sync-code-display" class="sync-code-display">0000</button>
+        <button type="button" id="btn-sync-code-edit" class="sync-code-edit">Code aendern</button>
+        <button type="button" id="btn-force-update" class="update-button">Update</button>
+        <div class="sync-code-hint">Hinweis: Code 0000 oeffnet nur die Kurzanleitung.</div>
+    </div>
+
+    <div class="auth-bar is-hidden" id="auth-bar" hidden>
+        <input
+            type="text"
+            id="sync-code"
+            class="auth-email"
+            placeholder="Geräte-Code (z. B. 1234)">
+        <button type="button" id="btn-sync-apply" class="auth-button">Verbinden</button>
+        <button type="button" id="btn-sync-new" class="auth-button auth-logout">Neu</button>
+        <div id="auth-status" class="auth-status"></div>
+    </div>
 
     <main>
 
         <!-- MEHRZEILEN-EINGABE -->
         <div class="input-section">
-            <label for="multi-line-input" class="input-label">
-                Mehrere Artikel auf einmal
-            </label>
-
             <textarea
                 id="multi-line-input"
                 placeholder="Jede Zeile = ein Artikel"
@@ -63,20 +75,67 @@
                         class="action-button">↵</button>
 
                 <button type="button"
+                        id="mic-button"
+                        class="mic-button"
+                        aria-pressed="false">🎤</button>
+
+                <button type="button"
+                        id="btn-clear-input"
+                        class="clear-input-button">Löschen</button>
+
+                <button type="button"
                         id="add-all-button"
-                        class="add-button">Alle hinzufügen</button>
+                        class="add-button">Übernehmen</button>
+
+                <button type="button"
+                        id="btn-photo-ocr"
+                        class="photo-button">Foto</button>
 
                 <button type="button"
                         id="btnExport"
                         class="export-button">Export</button>
             </div>
+
+            <input
+                type="file"
+                id="photo-ocr-input"
+                accept="image/*"
+                capture="environment"
+                hidden>
+
+            <div id="mic-status" class="mic-status" aria-live="polite"></div>
         </div>
 
         <ul id="liste"></ul>
 
     </main>
 
-    <div class="version-badge" id="version-badge">v1.0.9</div>
+    <div id="image-viewer" class="image-viewer" hidden>
+        <button type="button" id="btn-image-viewer-close" class="image-viewer-close">Schließen</button>
+        <img id="image-viewer-img" class="image-viewer-img" alt="Fotoeintrag">
+    </div>
+
+    <div id="help-viewer" class="help-viewer" hidden>
+        <div class="help-card">
+            <button type="button" id="btn-help-viewer-close" class="help-close">Schließen</button>
+            <h2>Kurzanleitung</h2>
+            <ol>
+                <li>App einmal installieren und danach als App öffnen (PWA).</li>
+                <li>Auf beiden Handys denselben 4-stelligen Geräte-Code eingeben.</li>
+                <li><strong>Text:</strong> In das Feld schreiben, dann <strong>Übernehmen</strong>.</li>
+                <li><strong>Sprache:</strong> Auf <strong>🎤</strong> tippen, Text prüfen, dann <strong>Übernehmen</strong>.</li>
+                <li><strong>Bild:</strong> Auf <strong>Foto</strong> tippen; das Foto wird sofort gespeichert.</li>
+                <li>Im Modus <strong>Einkaufen</strong> Artikel antippen, um sie abzuhaken.</li>
+                <li>Code <strong>0000</strong> ist nur für diese Kurzanleitung reserviert.</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="version-row">
+        <div class="version-badge" id="version-badge">v1.0.61</div>
+    </div>
+    <div class="sync-status" id="sync-status">Sync: Lokal</div>
+    <div class="sync-debug" id="sync-debug" hidden></div>
 
     <nav>
         <button type="button" id="btnErfassen" class="active">
@@ -90,7 +149,9 @@
 
 </div>
 
-<script src="app.js"></script>
+<script src="config.js?v=1.0.61"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="app.js?v=1.0.61"></script>
 
 </body>
 </html>

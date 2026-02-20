@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v1.0.9";
+const CACHE_VERSION = "v1.0.61";
 const CACHE_NAME = "einkaufsliste-" + CACHE_VERSION;
 
 const FILES_TO_CACHE = [
@@ -38,13 +38,43 @@ self.addEventListener("activate", event => {
   self.clients.claim();
 });
 
+self.addEventListener("message", event => {
+  if (event.data?.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+});
+
 /* FETCH */
 self.addEventListener("fetch", event => {
+  const request = event.request;
+  const requestUrl = new URL(request.url);
+  const sameOrigin = requestUrl.origin === self.location.origin;
+  const cacheKeyByPath = requestUrl.pathname === "/" ? "./index.html" : `.${requestUrl.pathname}`;
+
+  if (request.mode === "navigate") {
+    event.respondWith(
+      fetch(request)
+        .then(response => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put("./index.html", copy)).catch(() => {});
+          return response;
+        })
+        .catch(() => caches.match("./index.html"))
+    );
+    return;
+  }
+
   event.respondWith(
-    caches.match(event.request)
+    caches.match(request)
       .then(response => {
         if (response) return response;
-        return fetch(event.request).catch(() =>
+        if (sameOrigin) {
+          return caches.match(cacheKeyByPath).then(byPath => {
+            if (byPath) return byPath;
+            return fetch(request).catch(() => caches.match("./index.html"));
+          });
+        }
+        return fetch(request).catch(() =>
           caches.match("./index.html")
         );
       })
