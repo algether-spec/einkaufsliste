@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
 
-    <title>Erinnerungen</title>
+    <title>Einkaufsliste</title>
 
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#2563eb">
@@ -13,17 +13,17 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
 
     <!-- Styles -->
-    <link rel="stylesheet" href="style.css?v=1.0.0">
+    <link rel="stylesheet" href="style.css?v=1.0.61">
 
     <!-- Manifest -->
-    <link rel="manifest" href="manifest.json?v=1.0.0">
+    <link rel="manifest" href="manifest.json?v=1.0.61">
     <link rel="icon" type="image/png" sizes="192x192" href="icon-cart-192.png">
     <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon-180.png">
 
     <!-- Service Worker -->
     <script>
         if ("serviceWorker" in navigator) {
-            navigator.serviceWorker.register("service-worker.js?v=1.0.0", { updateViaCache: "none" });
+            navigator.serviceWorker.register("service-worker.js?v=1.0.61", { updateViaCache: "none" });
         }
     </script>
 </head>
@@ -32,14 +32,14 @@
 
 <!-- SPLASH SCREEN -->
 <div id="splash">
-    <div class="splash-cart" aria-label="Erinnerungen">🛒</div>
-    <div class="splash-title">Erinnerungen</div>
+    <div class="splash-cart" aria-label="Einkaufswagen">🛒</div>
+    <div class="splash-title">Einkaufsliste</div>
     <div class="splash-sub">powered by Al.Gether</div>
 </div>
 
 <div class="app">
 
-    <header>Erinnerungen</header>
+    <header>Einkaufsliste</header>
 
     <div class="sync-code-compact" id="sync-code-compact">
         Code:
@@ -66,7 +66,7 @@
         <div class="input-section">
             <textarea
                 id="multi-line-input"
-                placeholder="Jede Zeile = eine Erinnerung"
+                placeholder="Jede Zeile = ein Artikel"
                 rows="1"></textarea>
 
             <div class="input-actions">
@@ -125,14 +125,14 @@
                 <li><strong>Text:</strong> In das Feld schreiben, dann <strong>Übernehmen</strong>.</li>
                 <li><strong>Sprache:</strong> Auf <strong>🎤</strong> tippen, Text prüfen, dann <strong>Übernehmen</strong>.</li>
                 <li><strong>Bild:</strong> Auf <strong>Foto</strong> tippen; das Foto wird sofort gespeichert.</li>
-                <li>Im Modus <strong>Erledigt</strong> Einträge antippen, um sie abzuhaken.</li>
+                <li>Im Modus <strong>Einkaufen</strong> Artikel antippen, um sie abzuhaken.</li>
                 <li>Code <strong>0000</strong> ist nur für diese Kurzanleitung reserviert.</li>
             </ol>
         </div>
     </div>
 
     <div class="version-row">
-        <div class="version-badge" id="version-badge">v1.0.0</div>
+        <div class="version-badge" id="version-badge">v1.0.61</div>
     </div>
     <div class="sync-status" id="sync-status">Sync: Lokal</div>
     <div class="sync-debug" id="sync-debug" hidden></div>
@@ -142,16 +142,16 @@
             Erfassen
         </button>
 
-        <button type="button" id="btnErledigt">
-            Erledigt
+        <button type="button" id="btnEinkaufen">
+            Einkaufen
         </button>
     </nav>
 
 </div>
 
-<script src="config.js?v=1.0.0"></script>
+<script src="config.js?v=1.0.61"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="app.js?v=1.0.0"></script>
+<script src="app.js?v=1.0.61"></script>
 
 </body>
 </html>

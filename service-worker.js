@@ -1,5 +1,5 @@
-const CACHE_VERSION = "v1.0.0";
-const CACHE_NAME = "erinnerungen-" + CACHE_VERSION;
+const CACHE_VERSION = "v1.0.61";
+const CACHE_NAME = "einkaufsliste-" + CACHE_VERSION;
 
 const FILES_TO_CACHE = [
   "./",

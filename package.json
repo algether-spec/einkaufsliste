@@ -1,8 +1,8 @@
 {
-  "name": "erinnerungen-v1",
+  "name": "einkaufsliste-v2",
   "private": true,
-  "version": "1.0.0",
-  "description": "Offline-faehige Erinnerungen als Progressive Web App",
+  "version": "1.0.61",
+  "description": "Offline-faehige Einkaufsliste als Progressive Web App",
   "scripts": {
     "check:syntax": "node --check app.js && node --check service-worker.js",
     "check:smoke": "node scripts/smoke.mjs",
