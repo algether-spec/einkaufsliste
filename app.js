@@ -43,6 +43,7 @@ const btnClearInput = document.getElementById("btn-clear-input");
 const btnNewLine = document.getElementById("newline-button");
 const btnMic     = document.getElementById("mic-button");
 const micStatus  = document.getElementById("mic-status");
+const inputErrorStatus = document.getElementById("input-error-status");
 const imageViewer = document.getElementById("image-viewer");
 const imageViewerImg = document.getElementById("image-viewer-img");
 const btnImageViewerClose = document.getElementById("btn-image-viewer-close");
@@ -50,7 +51,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.63";
+const APP_VERSION = "1.0.64";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -142,6 +143,11 @@ function setSyncStatus(text, tone = "offline") {
 function setAuthStatus(text) {
     if (!authStatus) return;
     authStatus.textContent = text;
+}
+
+function setInputErrorStatus(text) {
+    if (!inputErrorStatus) return;
+    inputErrorStatus.textContent = String(text || "").trim();
 }
 
 function normalizeSyncCode(input) {
@@ -254,6 +260,7 @@ async function applySyncCode(code, shouldReload = true, options = {}) {
     if (syncCodeInput) syncCodeInput.value = currentSyncCode;
     if (btnSyncCodeDisplay) btnSyncCodeDisplay.textContent = currentSyncCode;
     setAuthStatus(`Geraete-Code: ${currentSyncCode}`);
+    setInputErrorStatus("");
     setSyncEditMode(false);
     if (syncCodeInput) syncCodeInput.blur();
     void touchSyncCodeUsage(currentSyncCode).catch(err => {
@@ -660,6 +667,7 @@ async function ensureSupabaseAuth() {
         }
 
         if (!user?.id) {
+            setInputErrorStatus("Anonyme Anmeldung fehlgeschlagen. Supabase Auth/Anon-Login pruefen.");
             setSyncStatus("Anonyme Anmeldung fehlgeschlagen. Supabase Auth/Anon-Login pruefen.", "offline");
             updateSyncDebug();
             return false;
@@ -667,6 +675,7 @@ async function ensureSupabaseAuth() {
         supabaseUserId = user.id;
         supabaseReady = true;
         startRealtimeSync();
+        setInputErrorStatus("");
         setSyncStatus("Sync: Verbunden", "ok");
         updateSyncDebug();
         return true;
@@ -675,6 +684,7 @@ async function ensureSupabaseAuth() {
         supabaseReady = false;
         supabaseUserId = "";
         stopRealtimeSync();
+        setInputErrorStatus(getSyncErrorHint(err));
         setSyncStatus(getSyncErrorHint(err), "offline");
         updateSyncDebug();
         return false;
