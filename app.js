@@ -51,7 +51,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.64";
+const APP_VERSION = "1.0.65";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -292,9 +292,15 @@ function setupSyncCodeUi() {
     setSyncEditMode(false);
 
     if (!hasSupabaseCredentials) {
-        setAuthStatus("Supabase nicht konfiguriert. App laeuft nur lokal.");
+        const msg = "Supabase nicht konfiguriert. App laeuft nur lokal.";
+        setAuthStatus(msg);
+        setInputErrorStatus(msg);
     } else if (!hasSupabaseLibrary) {
-        setAuthStatus("Supabase nicht geladen. Internet pruefen und neu laden.");
+        const msg = "Supabase nicht geladen. Internet pruefen und neu laden.";
+        setAuthStatus(msg);
+        setInputErrorStatus(msg);
+    } else {
+        setInputErrorStatus("");
     }
 
     if (btnSyncApply) {
@@ -651,7 +657,11 @@ function startRealtimeSync() {
 }
 
 async function ensureSupabaseAuth() {
-    if (!supabaseClient) return false;
+    if (!supabaseClient) {
+        setInputErrorStatus("Supabase Client nicht initialisiert. config.js / Internet pruefen.");
+        setSyncStatus("Sync: Offline (lokal)", "offline");
+        return false;
+    }
     if (supabaseReady && supabaseUserId) return true;
 
     try {
