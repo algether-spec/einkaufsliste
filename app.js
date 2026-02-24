@@ -650,14 +650,21 @@ async function ensureSupabaseAuth() {
     try {
         setSyncStatus("Sync: Verbinde...", "warn");
         const sessionResult = await supabaseClient.auth.getSession();
+        if (sessionResult?.error) throw sessionResult.error;
         let user = sessionResult?.data?.session?.user || null;
 
         if (!user) {
             const anonResult = await supabaseClient.auth.signInAnonymously();
+            if (anonResult?.error) throw anonResult.error;
             user = anonResult?.data?.user || null;
         }
 
-        if (!user?.id) return false;
+        if (!user?.id) {
+            setAuthStatus("Anonyme Anmeldung fehlgeschlagen. Supabase Auth/Anon-Login pruefen.");
+            setSyncStatus("Sync: Offline (lokal)", "offline");
+            updateSyncDebug();
+            return false;
+        }
         supabaseUserId = user.id;
         supabaseReady = true;
         startRealtimeSync();
