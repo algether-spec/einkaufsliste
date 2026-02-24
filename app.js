@@ -669,6 +669,7 @@ async function ensureSupabaseAuth() {
         supabaseReady = false;
         supabaseUserId = "";
         stopRealtimeSync();
+        setAuthStatus(getSyncErrorHint(err));
         setSyncStatus("Sync: Offline (lokal)", "offline");
         updateSyncDebug();
         return false;
