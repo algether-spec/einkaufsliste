@@ -51,7 +51,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.65";
+const APP_VERSION = "1.0.66";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -686,6 +686,7 @@ async function ensureSupabaseAuth() {
         supabaseReady = true;
         startRealtimeSync();
         setInputErrorStatus("");
+        setInputErrorStatus("");
         setSyncStatus("Sync: Verbunden", "ok");
         updateSyncDebug();
         return true;
@@ -857,11 +858,13 @@ async function syncRemoteIfNeeded(forceOverwrite = false) {
         } while (remoteSyncQueued);
         lastSyncAt = formatTimeIso(new Date());
         localDirty = false;
+        setInputErrorStatus("");
         setSyncStatus("Sync: Verbunden", "ok");
         updateSyncDebug();
     } catch (err) {
         console.warn("Remote-Sync fehlgeschlagen, lokal bleibt aktiv:", err, formatSupabaseError(err));
         setSyncStatus("Sync: Offline (lokal)", "offline");
+        setInputErrorStatus(getSyncErrorHint(err));
         setAuthStatus(getSyncErrorHint(err));
         updateSyncDebug();
     } finally {
@@ -892,11 +895,13 @@ async function refreshFromRemoteIfChanged() {
         }
 
         lastSyncAt = formatTimeIso(new Date());
+        setInputErrorStatus("");
         setSyncStatus("Sync: Verbunden", "ok");
         updateSyncDebug();
     } catch (err) {
         console.warn("Remote-Refresh fehlgeschlagen:", err, formatSupabaseError(err));
         setSyncStatus("Sync: Offline (lokal)", "offline");
+        setInputErrorStatus(getSyncErrorHint(err));
         setAuthStatus(getSyncErrorHint(err));
         updateSyncDebug();
     } finally {
@@ -959,6 +964,7 @@ async function laden() {
     } catch (err) {
         console.warn("Remote-Laden fehlgeschlagen, nutze lokale Daten:", err, formatSupabaseError(err));
         setSyncStatus("Sync: Offline (lokal)", "offline");
+        setInputErrorStatus(getSyncErrorHint(err));
         setAuthStatus(getSyncErrorHint(err));
         updateSyncDebug();
         datenInListeSchreiben(lokaleDaten);
