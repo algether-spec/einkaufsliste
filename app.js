@@ -660,8 +660,7 @@ async function ensureSupabaseAuth() {
         }
 
         if (!user?.id) {
-            setAuthStatus("Anonyme Anmeldung fehlgeschlagen. Supabase Auth/Anon-Login pruefen.");
-            setSyncStatus("Sync: Offline (lokal)", "offline");
+            setSyncStatus("Anonyme Anmeldung fehlgeschlagen. Supabase Auth/Anon-Login pruefen.", "offline");
             updateSyncDebug();
             return false;
         }
@@ -676,8 +675,7 @@ async function ensureSupabaseAuth() {
         supabaseReady = false;
         supabaseUserId = "";
         stopRealtimeSync();
-        setAuthStatus(getSyncErrorHint(err));
-        setSyncStatus("Sync: Offline (lokal)", "offline");
+        setSyncStatus(getSyncErrorHint(err), "offline");
         updateSyncDebug();
         return false;
     }
