@@ -51,7 +51,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.78";
+const APP_VERSION = "1.0.79";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -210,47 +210,46 @@ function getStoredSyncCode() {
 }
 
 async function isSyncCodeOccupied(code) {
-    if (!supabaseClient || !isValidSyncCode(code)) return false;
-    if (!(await ensureSupabaseAuth())) return false;
+    if (!isValidSyncCode(code)) return false;
+    return false;
+}
 
-    const { data, error } = await supabaseClient
-        .from(SUPABASE_CODES_TABLE)
-        .select("sync_code")
-        .eq("sync_code", String(code))
-        .limit(1);
+async function useSyncCodeRpc(code, options = {}) {
+    if (!supabaseClient) throw new Error("SUPABASE_CLIENT_MISSING");
+    if (!isValidSyncCode(code)) throw new Error("SYNC_CODE_FORMAT_INVALID");
+    if (isReservedSyncCode(code)) throw new Error("SYNC_CODE_RESERVED");
+    if (!(await ensureSupabaseAuth())) throw new Error("AUTH_REQUIRED");
 
+    const allowCreate = options.allowCreate !== false;
+    const requireNew = options.requireNew === true;
+
+    const { data, error } = await supabaseClient.rpc("use_sync_code", {
+        p_code: String(code),
+        p_allow_create: allowCreate,
+        p_require_new: requireNew
+    });
     if (error) throw error;
-    return Array.isArray(data) && data.length > 0;
+    return data;
 }
 
 async function touchSyncCodeUsage(code) {
     if (!supabaseClient) return;
     if (!isValidSyncCode(code)) return;
     if (isReservedSyncCode(code)) return;
-    if (!(await ensureSupabaseAuth())) return;
-
-    const { error } = await supabaseClient
-        .from(SUPABASE_CODES_TABLE)
-        .upsert(
-            { sync_code: String(code), last_used_at: new Date().toISOString() },
-            { onConflict: "sync_code" }
-        );
-
-    if (error) throw error;
+    await useSyncCodeRpc(code, { allowCreate: true, requireNew: false });
 }
+
 
 async function generateAvailableSyncCode(maxAttempts = 25) {
+    let last = generateSyncCode();
     for (let i = 0; i < maxAttempts; i += 1) {
         const candidate = generateSyncCode();
-        try {
-            if (!(await isSyncCodeOccupied(candidate))) return candidate;
-        } catch (err) {
-            console.warn("Freien Code konnte nicht online geprueft werden:", err);
-            return candidate;
-        }
+        if (candidate !== currentSyncCode && !isReservedSyncCode(candidate)) return candidate;
+        last = candidate;
     }
-    return generateSyncCode();
+    return last;
 }
+
 
 async function applySyncCode(code, shouldReload = true, options = {}) {
     const allowOccupied = options.allowOccupied !== false;
@@ -266,22 +265,25 @@ async function applySyncCode(code, shouldReload = true, options = {}) {
         return;
     }
 
-    if (!allowOccupied && normalized !== currentSyncCode) {
-        try {
-            if (await isSyncCodeOccupied(normalized)) {
-                setAuthStatus("Code ist bereits belegt. Bitte anderen Code nutzen.");
-                if (syncCodeInput) {
-                    syncCodeInput.value = currentSyncCode || "";
-                    syncCodeInput.focus();
-                    syncCodeInput.select();
-                }
-                return;
-            }
-        } catch (err) {
-            console.warn("Code-Pruefung fehlgeschlagen:", err);
-            setAuthStatus(getSyncErrorHint(err));
-            return;
+    try {
+        await useSyncCodeRpc(normalized, {
+            allowCreate: true,
+            requireNew: !allowOccupied && normalized !== currentSyncCode
+        });
+    } catch (err) {
+        console.warn("Code-Verbinden fehlgeschlagen:", err);
+        const hint = getSyncErrorHint(err);
+        if (String(formatSupabaseError(err)).includes("SYNC_CODE_ALREADY_EXISTS")) {
+            setAuthStatus("Code ist bereits belegt. Bitte anderen Code nutzen.");
+        } else {
+            setAuthStatus(hint);
         }
+        if (syncCodeInput) {
+            syncCodeInput.value = currentSyncCode || normalized || "";
+            syncCodeInput.focus();
+            syncCodeInput.select();
+        }
+        return;
     }
 
     currentSyncCode = normalized;
@@ -292,9 +294,6 @@ async function applySyncCode(code, shouldReload = true, options = {}) {
     setInputErrorStatus("");
     setSyncEditMode(false);
     if (syncCodeInput) syncCodeInput.blur();
-    void touchSyncCodeUsage(currentSyncCode).catch(err => {
-        console.warn("Code-Nutzung konnte nicht markiert werden:", err);
-    });
     if (supabaseClient) startRealtimeSync();
     updateSyncDebug();
     if (shouldReload) void laden();
@@ -490,6 +489,15 @@ function getSyncErrorHint(err) {
     }
     if (message.includes("jwt") || message.includes("auth")) {
         return "Anmeldung fehlgeschlagen. Bitte Seite neu laden.";
+    }
+    if (message.includes("sync_code_already_exists")) {
+        return "Code ist bereits belegt. Bitte anderen Code nutzen.";
+    }
+    if (message.includes("sync_code_format_invalid")) {
+        return "Bitte Code im Format AAAA1234 eingeben.";
+    }
+    if (message.includes("sync_code_reserved")) {
+        return "Code HELP0000 ist reserviert.";
     }
     if (message.includes("failed to fetch") || message.includes("network")) {
         return "Netzwerkfehler. Internetverbindung pruefen.";
