@@ -157,7 +157,7 @@ header {
 
 /* Hauptbereich */
 main {
-    flex: 1;
+    flex: 0 0 auto;
     padding: 10px;
 }
 
