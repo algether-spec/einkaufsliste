@@ -311,8 +311,8 @@ button:disabled {
 }
 
 .input-error-status {
-    min-height: 18px;
-    font-size: 12px;
+    min-height: 13px;
+    font-size: 11px;
     color: #b91c1c;
     font-weight: 600;
 }

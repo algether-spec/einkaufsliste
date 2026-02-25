@@ -51,7 +51,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.68";
+const APP_VERSION = "1.0.69";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -174,7 +174,7 @@ function generateSyncCode() {
 
 function getStoredSyncCode() {
     const stored = normalizeSyncCode(localStorage.getItem(SYNC_CODE_KEY) || "");
-    if (stored && !isReservedSyncCode(stored)) return stored;
+    if (isValidSyncCode(stored) && !isReservedSyncCode(stored)) return stored;
     const created = generateSyncCode();
     localStorage.setItem(SYNC_CODE_KEY, created);
     return created;
