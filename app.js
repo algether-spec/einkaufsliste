@@ -51,7 +51,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.77";
+const APP_VERSION = "1.0.78";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -60,6 +60,28 @@ const SUPABASE_TABLE = "shopping_items";
 const SUPABASE_CODES_TABLE = "sync_codes";
 const SYNC_CODE_KEY = "einkaufsliste-sync-code";
 const IMAGE_ENTRY_PREFIX = "__IMG__:";
+const IMAGE_ENTRY_CAPTION_MARKER = "\n__CAPTION__:";
+
+function parsePhotoEntryText(rawText) {
+    const raw = String(rawText || "");
+    if (!raw.startsWith(IMAGE_ENTRY_PREFIX)) return null;
+
+    const markerIndex = raw.indexOf(IMAGE_ENTRY_CAPTION_MARKER, IMAGE_ENTRY_PREFIX.length);
+    if (markerIndex === -1) {
+        return { imageSrc: raw.slice(IMAGE_ENTRY_PREFIX.length), caption: "" };
+    }
+
+    return {
+        imageSrc: raw.slice(IMAGE_ENTRY_PREFIX.length, markerIndex),
+        caption: raw.slice(markerIndex + IMAGE_ENTRY_CAPTION_MARKER.length)
+    };
+}
+
+function buildPhotoEntryText(imageSrc, caption = "") {
+    const img = String(imageSrc || "");
+    const cap = String(caption || "").trim();
+    return cap ? (IMAGE_ENTRY_PREFIX + img + IMAGE_ENTRY_CAPTION_MARKER + cap) : (IMAGE_ENTRY_PREFIX + img);
+}
 const SYNC_CODE_LENGTH = 8;
 const RESERVED_SYNC_CODE = "HELP0000";
 const BACKGROUND_SYNC_INTERVAL_MS = 4000;
@@ -996,14 +1018,23 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId()) {
     li.dataset.text = rawText;
 
     if (rawText.startsWith(IMAGE_ENTRY_PREFIX)) {
-        const imageSrc = rawText.slice(IMAGE_ENTRY_PREFIX.length);
+        const parsedPhoto = parsePhotoEntryText(rawText) || { imageSrc: "", caption: "" };
+        const imageSrc = parsedPhoto.imageSrc;
+        let photoCaption = String(parsedPhoto.caption || "").trim();
+
         const wrapper = document.createElement("div");
         wrapper.className = "list-photo-item";
 
         const thumb = document.createElement("img");
         thumb.className = "list-photo-thumb";
         thumb.src = imageSrc;
-        thumb.alt = "Fotoeintrag";
+        thumb.alt = photoCaption ? `Foto: ${photoCaption}` : "Fotoeintrag";
+
+        const content = document.createElement("div");
+        content.className = "list-photo-content";
+
+        const actions = document.createElement("div");
+        actions.className = "list-photo-actions";
 
         const openBtn = document.createElement("button");
         openBtn.type = "button";
@@ -1013,6 +1044,11 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId()) {
             event.stopPropagation();
             openImageViewer(imageSrc);
         };
+
+        const captionBtn = document.createElement("button");
+        captionBtn.type = "button";
+        captionBtn.className = "list-photo-caption";
+        captionBtn.textContent = "Text";
 
         const deleteBtn = document.createElement("button");
         deleteBtn.type = "button";
@@ -1025,15 +1061,45 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId()) {
             setMicStatus("Foto gelöscht.");
         };
 
+        const captionText = document.createElement("div");
+        captionText.className = "list-photo-caption-text";
+
+        const applyPhotoCaption = (nextCaption, saveNow = false) => {
+            photoCaption = String(nextCaption || "").trim();
+            li.dataset.rawText = buildPhotoEntryText(imageSrc, photoCaption);
+            li.dataset.text = li.dataset.rawText;
+            thumb.alt = photoCaption ? `Foto: ${photoCaption}` : "Fotoeintrag";
+            captionText.textContent = photoCaption;
+            captionText.hidden = !photoCaption;
+            captionBtn.textContent = photoCaption ? "Text ändern" : "Text";
+            if (saveNow) speichern(true);
+        };
+
+        captionBtn.onclick = event => {
+            event.stopPropagation();
+            const current = photoCaption;
+            const result = window.prompt("Bildbeschreibung (optional):", current);
+            if (result === null) return;
+            applyPhotoCaption(result, true);
+            setMicStatus(result.trim() ? "Bildbeschreibung gespeichert." : "Bildbeschreibung entfernt.");
+        };
+
         thumb.onclick = event => {
             event.stopPropagation();
             openImageViewer(imageSrc);
         };
 
+        actions.appendChild(openBtn);
+        actions.appendChild(captionBtn);
+        actions.appendChild(deleteBtn);
+        content.appendChild(actions);
+        content.appendChild(captionText);
+
         wrapper.appendChild(thumb);
-        wrapper.appendChild(openBtn);
-        wrapper.appendChild(deleteBtn);
+        wrapper.appendChild(content);
         li.appendChild(wrapper);
+
+        applyPhotoCaption(photoCaption, false);
     } else {
         li.textContent = rawText;
     }
@@ -1148,7 +1214,7 @@ async function addPhotoAsListItem(file) {
     try {
         const imageSrc = await readFileAsDataUrl(file);
         const optimizedImageSrc = await optimizePhotoDataUrl(imageSrc);
-        eintragAnlegen(IMAGE_ENTRY_PREFIX + optimizedImageSrc);
+        eintragAnlegen(buildPhotoEntryText(optimizedImageSrc));
         speichern();
         if (multiInput?.value?.trim()) {
             setMicStatus("Foto gespeichert. Text bleibt im Feld und kann mit Übernehmen gespeichert werden.");
@@ -1454,7 +1520,10 @@ btnExport.onclick = async () => {
     const text = [...liste.querySelectorAll("li")]
         .map(li => {
             const raw = String(li.dataset.rawText || li.dataset.text || "");
-            const label = raw.startsWith(IMAGE_ENTRY_PREFIX) ? "[Foto]" : raw;
+            const parsedPhoto = parsePhotoEntryText(raw);
+            const label = parsedPhoto
+                ? (parsedPhoto.caption ? `[Foto] ${parsedPhoto.caption}` : "[Foto]")
+                : raw;
             return (li.classList.contains("erledigt") ? "✔ " : "• ") + label;
         })
         .join("\n");
