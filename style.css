@@ -100,7 +100,11 @@ header {
 
 .auth-status {
     grid-column: 1 / -1;
-    font-size: 12px;
+    display: block;
+    width: 100%;
+    min-height: 13px;
+    font-size: 11px;
+    line-height: 1.15;
     color: #6b7280;
 }
 
@@ -311,8 +315,11 @@ button:disabled {
 }
 
 .input-error-status {
+    display: block;
+    width: 100%;
     min-height: 13px;
     font-size: 11px;
+    line-height: 1.15;
     color: #b91c1c;
     font-weight: 600;
 }

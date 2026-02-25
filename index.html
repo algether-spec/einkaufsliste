@@ -13,17 +13,17 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
 
     <!-- Styles -->
-    <link rel="stylesheet" href="style.css?v=1.0.69">
+    <link rel="stylesheet" href="style.css?v=1.0.70">
 
     <!-- Manifest -->
-    <link rel="manifest" href="manifest.json?v=1.0.69">
+    <link rel="manifest" href="manifest.json?v=1.0.70">
     <link rel="icon" type="image/png" sizes="192x192" href="icon-cart-192.png">
     <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon-180.png">
 
     <!-- Service Worker -->
     <script>
         if ("serviceWorker" in navigator) {
-            navigator.serviceWorker.register("service-worker.js?v=1.0.69", { updateViaCache: "none" });
+            navigator.serviceWorker.register("service-worker.js?v=1.0.70", { updateViaCache: "none" });
         }
     </script>
 </head>
@@ -43,10 +43,10 @@
 
     <div class="sync-code-compact" id="sync-code-compact">
         Code:
-        <button type="button" id="btn-sync-code-display" class="sync-code-display">00000000</button>
+        <button type="button" id="btn-sync-code-display" class="sync-code-display">HELP0000</button>
         <button type="button" id="btn-sync-code-edit" class="sync-code-edit">Code aendern</button>
         <button type="button" id="btn-force-update" class="update-button">Update</button>
-        <div class="sync-code-hint">Hinweis: Code 00000000 oeffnet nur die Kurzanleitung.</div>
+        <div class="sync-code-hint">Hinweis: Code HELP0000 oeffnet nur die Kurzanleitung.</div>
     </div>
 
     <div class="auth-bar is-hidden" id="auth-bar" hidden>
@@ -54,7 +54,7 @@
             type="text"
             id="sync-code"
             class="auth-email"
-            placeholder="Geräte-Code (z. B. 12345678)">
+            placeholder="Geräte-Code (z. B. LUIS0090)">
         <button type="button" id="btn-sync-apply" class="auth-button">Verbinden</button>
         <button type="button" id="btn-sync-new" class="auth-button auth-logout">Neu</button>
         <div id="auth-status" class="auth-status"></div>
@@ -123,18 +123,18 @@
             <h2>Kurzanleitung</h2>
             <ol>
                 <li>App einmal installieren und danach als App öffnen (PWA).</li>
-                <li>Auf beiden Handys denselben 8-stelligen Geräte-Code eingeben.</li>
+                <li>Auf beiden Handys denselben Geräte-Code im Format AAAA1234 eingeben.</li>
                 <li><strong>Text:</strong> In das Feld schreiben, dann <strong>Übernehmen</strong>.</li>
                 <li><strong>Sprache:</strong> Auf <strong>🎤</strong> tippen, Text prüfen, dann <strong>Übernehmen</strong>.</li>
                 <li><strong>Bild:</strong> Auf <strong>Foto</strong> tippen; das Foto wird sofort gespeichert.</li>
                 <li>Im Modus <strong>Einkaufen</strong> Artikel antippen, um sie abzuhaken.</li>
-                <li>Code <strong>00000000</strong> ist nur für diese Kurzanleitung reserviert.</li>
+                <li>Code <strong>HELP0000</strong> ist nur für diese Kurzanleitung reserviert.</li>
             </ol>
         </div>
     </div>
 
     <div class="version-row">
-        <div class="version-badge" id="version-badge">v1.0.69</div>
+        <div class="version-badge" id="version-badge">v1.0.70</div>
     </div>
     <div class="sync-status" id="sync-status">Sync: Lokal</div>
     <div class="sync-debug" id="sync-debug" hidden></div>
@@ -151,9 +151,9 @@
 
 </div>
 
-<script src="config.js?v=1.0.69"></script>
+<script src="config.js?v=1.0.70"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="app.js?v=1.0.69"></script>
+<script src="app.js?v=1.0.70"></script>
 
 </body>
 </html>

@@ -51,7 +51,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.69";
+const APP_VERSION = "1.0.70";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -61,7 +61,7 @@ const SUPABASE_CODES_TABLE = "sync_codes";
 const SYNC_CODE_KEY = "einkaufsliste-sync-code";
 const IMAGE_ENTRY_PREFIX = "__IMG__:";
 const SYNC_CODE_LENGTH = 8;
-const RESERVED_SYNC_CODE = "00000000";
+const RESERVED_SYNC_CODE = "HELP0000";
 const BACKGROUND_SYNC_INTERVAL_MS = 4000;
 const AUTO_UPDATE_CHECK_INTERVAL_MS = 60000;
 const GROUP_DEFINITIONS = {
@@ -151,13 +151,14 @@ function setInputErrorStatus(text) {
 }
 
 function normalizeSyncCode(input) {
-    return String(input || "")
-        .replace(/\D/g, "")
-        .slice(0, SYNC_CODE_LENGTH);
+    const raw = String(input || "").toUpperCase();
+    const letters = raw.replace(/[^A-Z]/g, "").slice(0, 4);
+    const digits = raw.replace(/\D/g, "").slice(0, 4);
+    return (letters + digits).slice(0, SYNC_CODE_LENGTH);
 }
 
 function isValidSyncCode(code) {
-    return new RegExp("^\\d{" + SYNC_CODE_LENGTH + "}$").test(code);
+    return /^[A-Z]{4}[0-9]{4}$/.test(String(code || ""));
 }
 
 function isReservedSyncCode(code) {
@@ -165,9 +166,15 @@ function isReservedSyncCode(code) {
 }
 
 function generateSyncCode() {
+    const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     let nextCode = RESERVED_SYNC_CODE;
     while (isReservedSyncCode(nextCode)) {
-        nextCode = String(Math.floor(Math.random() * 100000000)).padStart(SYNC_CODE_LENGTH, "0");
+        let letters = "";
+        for (let i = 0; i < 4; i += 1) {
+            letters += LETTERS[Math.floor(Math.random() * LETTERS.length)];
+        }
+        const digits = String(Math.floor(Math.random() * 10000)).padStart(4, "0");
+        nextCode = letters + digits;
     }
     return nextCode;
 }
@@ -227,12 +234,12 @@ async function applySyncCode(code, shouldReload = true, options = {}) {
     const allowOccupied = options.allowOccupied !== false;
     const normalized = normalizeSyncCode(code);
     if (!isValidSyncCode(normalized)) {
-        setAuthStatus("Bitte 8-stelligen Zahlencode eingeben.");
+        setAuthStatus("Bitte Code im Format AAAA1234 eingeben.");
         return;
     }
     if (isReservedSyncCode(normalized)) {
         openHelpViewer();
-        setAuthStatus("Code 00000000 oeffnet die Kurzanleitung.");
+        setAuthStatus("Code HELP0000 oeffnet die Kurzanleitung.");
         if (syncCodeInput) syncCodeInput.value = currentSyncCode || "";
         return;
     }
