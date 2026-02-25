@@ -102,9 +102,9 @@ header {
     grid-column: 1 / -1;
     display: block;
     width: 100%;
-    min-height: 13px;
-    font-size: 11px;
-    line-height: 1.15;
+    min-height: 12px;
+    font-size: 10px;
+    line-height: 1.05;
     color: #6b7280;
 }
 
@@ -290,8 +290,8 @@ button:disabled {
 .add-button,
 .export-button {
     width: 100%;
-    min-height: 40px;
-    padding: 8px;
+    min-height: 56px;
+    padding: 10px 10px;
     border: none;
     border-radius: 12px;
     display: flex;
@@ -317,9 +317,9 @@ button:disabled {
 .input-error-status {
     display: block;
     width: 100%;
-    min-height: 13px;
-    font-size: 11px;
-    line-height: 1.15;
+    min-height: 12px;
+    font-size: 10px;
+    line-height: 1.05;
     color: #b91c1c;
     font-weight: 600;
 }
@@ -609,14 +609,26 @@ nav button::before {
 }
 
 #btnEinkaufen.active {
-    background: #047857;
+    background: linear-gradient(135deg, #059669, #047857);
     color: #ecfdf5;
     border-color: #065f46;
-    box-shadow: 0 6px 14px rgba(4, 120, 87, 0.26);
+    box-shadow: 0 8px 16px rgba(4, 120, 87, 0.30);
 }
 
 nav button:not(.active) {
-    opacity: 0.8;
+    opacity: 1;
+}
+
+#btnErfassen:not(.active) {
+    background: #eef2ff;
+    color: #4f46e5;
+    border-color: #c7d2fe;
+}
+
+#btnEinkaufen:not(.active) {
+    background: #ecfdf5;
+    color: #047857;
+    border-color: #a7f3d0;
 }
 
 /* Splash Screen */

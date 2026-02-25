@@ -51,7 +51,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.70";
+const APP_VERSION = "1.0.71";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -308,6 +308,13 @@ function setupSyncCodeUi() {
         setInputErrorStatus(msg);
     } else {
         setInputErrorStatus("");
+    }
+
+    if (syncCodeInput) {
+        syncCodeInput.addEventListener("input", () => {
+            const normalized = normalizeSyncCode(syncCodeInput.value);
+            if (syncCodeInput.value !== normalized) syncCodeInput.value = normalized;
+        });
     }
 
     if (btnSyncApply) {
