@@ -5,8 +5,8 @@
 - Unten sollte eine Version stehen (z. B. `v1.0.46`).
 
 ## 2) Zwei Handys koppeln
-- Auf beiden Handys denselben 4-stelligen `Code` setzen.
-- Achtung: `0000` ist reserviert und nicht nutzbar.
+- Auf beiden Handys denselben 8-stelligen `Code` setzen.
+- Achtung: `00000000` ist reserviert und nicht nutzbar.
 - Nach dem Setzen sollten beide Geräte dieselbe Liste sehen.
 
 ## 3) Erinnerungen hinzufügen (Text)

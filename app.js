@@ -51,7 +51,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.66";
+const APP_VERSION = "1.0.68";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -60,8 +60,8 @@ const SUPABASE_TABLE = "shopping_items";
 const SUPABASE_CODES_TABLE = "sync_codes";
 const SYNC_CODE_KEY = "einkaufsliste-sync-code";
 const IMAGE_ENTRY_PREFIX = "__IMG__:";
-const SYNC_CODE_LENGTH = 4;
-const RESERVED_SYNC_CODE = "0000";
+const SYNC_CODE_LENGTH = 8;
+const RESERVED_SYNC_CODE = "00000000";
 const BACKGROUND_SYNC_INTERVAL_MS = 4000;
 const AUTO_UPDATE_CHECK_INTERVAL_MS = 60000;
 const GROUP_DEFINITIONS = {
@@ -167,7 +167,7 @@ function isReservedSyncCode(code) {
 function generateSyncCode() {
     let nextCode = RESERVED_SYNC_CODE;
     while (isReservedSyncCode(nextCode)) {
-        nextCode = String(Math.floor(Math.random() * 10000)).padStart(SYNC_CODE_LENGTH, "0");
+        nextCode = String(Math.floor(Math.random() * 100000000)).padStart(SYNC_CODE_LENGTH, "0");
     }
     return nextCode;
 }
@@ -227,12 +227,12 @@ async function applySyncCode(code, shouldReload = true, options = {}) {
     const allowOccupied = options.allowOccupied !== false;
     const normalized = normalizeSyncCode(code);
     if (!isValidSyncCode(normalized)) {
-        setAuthStatus("Bitte 4-stelligen Zahlencode eingeben.");
+        setAuthStatus("Bitte 8-stelligen Zahlencode eingeben.");
         return;
     }
     if (isReservedSyncCode(normalized)) {
         openHelpViewer();
-        setAuthStatus("Code 0000 oeffnet die Kurzanleitung.");
+        setAuthStatus("Code 00000000 oeffnet die Kurzanleitung.");
         if (syncCodeInput) syncCodeInput.value = currentSyncCode || "";
         return;
     }
@@ -865,7 +865,6 @@ async function syncRemoteIfNeeded(forceOverwrite = false) {
         console.warn("Remote-Sync fehlgeschlagen, lokal bleibt aktiv:", err, formatSupabaseError(err));
         setSyncStatus("Sync: Offline (lokal)", "offline");
         setInputErrorStatus(getSyncErrorHint(err));
-        setAuthStatus(getSyncErrorHint(err));
         updateSyncDebug();
     } finally {
         remoteSyncInFlight = false;
@@ -902,7 +901,6 @@ async function refreshFromRemoteIfChanged() {
         console.warn("Remote-Refresh fehlgeschlagen:", err, formatSupabaseError(err));
         setSyncStatus("Sync: Offline (lokal)", "offline");
         setInputErrorStatus(getSyncErrorHint(err));
-        setAuthStatus(getSyncErrorHint(err));
         updateSyncDebug();
     } finally {
         remotePullInFlight = false;
@@ -965,7 +963,6 @@ async function laden() {
         console.warn("Remote-Laden fehlgeschlagen, nutze lokale Daten:", err, formatSupabaseError(err));
         setSyncStatus("Sync: Offline (lokal)", "offline");
         setInputErrorStatus(getSyncErrorHint(err));
-        setAuthStatus(getSyncErrorHint(err));
         updateSyncDebug();
         datenInListeSchreiben(lokaleDaten);
         localDirty = true;
