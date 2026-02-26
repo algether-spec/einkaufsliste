@@ -51,7 +51,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.81";
+const APP_VERSION = "1.0.82";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -1525,13 +1525,19 @@ btnEinkaufen.onclick = () => setModus("einkaufen");
 ====================== */
 
 btnExport.onclick = async () => {
-    const lines = [...liste.querySelectorAll("li")]
+    const textEntries = [...liste.querySelectorAll("li")]
         .map(li => ({
             erledigt: li.classList.contains("erledigt"),
             raw: String(li.dataset.rawText || li.dataset.text || "")
         }))
-        .filter(item => item.raw && !item.raw.startsWith(IMAGE_ENTRY_PREFIX))
-        .map(item => (item.erledigt ? "✔ " : "• ") + item.raw);
+        .filter(item => item.raw && !item.raw.startsWith(IMAGE_ENTRY_PREFIX));
+
+    const offeneLines = textEntries
+        .filter(item => !item.erledigt)
+        .map(item => "• " + item.raw);
+    const erledigteLines = textEntries
+        .filter(item => item.erledigt)
+        .map(item => "✔ " + item.raw);
 
     const exportDate = new Intl.DateTimeFormat("de-AT", {
         day: "2-digit",
@@ -1542,8 +1548,14 @@ btnExport.onclick = async () => {
     const text = [
         "Einkaufsliste",
         `Datum: ${exportDate}`,
+        `Text-Einträge: ${textEntries.length}`,
+        "────────────",
         "",
-        ...(lines.length ? lines : ["(keine Text-Einträge)"])
+        "Offen",
+        ...(offeneLines.length ? offeneLines : ["(keine offenen Text-Einträge)"]),
+        "",
+        "Erledigt",
+        ...(erledigteLines.length ? erledigteLines : ["(keine erledigten Text-Einträge)"])
     ].join("\n");
 
     if (navigator.share) {
