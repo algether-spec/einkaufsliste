@@ -51,7 +51,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.87";
+const APP_VERSION = "1.0.88";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -1609,7 +1609,7 @@ btnExport.onclick = async () => {
     }).format(new Date());
 
     const text = [
-        "Einkaufsliste",
+        "Einkaufen",
         `Datum: ${exportDate}`,
         `Text-Einträge: ${textEntries.length}`,
         "────────────",
@@ -1623,7 +1623,7 @@ btnExport.onclick = async () => {
 
     if (navigator.share) {
         try {
-            await navigator.share({ title: "Einkaufsliste", text });
+            await navigator.share({ title: "Einkaufen", text });
             return;
         } catch {}
     }
