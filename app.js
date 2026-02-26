@@ -51,7 +51,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.86";
+const APP_VERSION = "1.0.87";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -1179,8 +1179,11 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId()) {
         if (isPhotoEntryText(rawText)) {
             liste.appendChild(li);
         } else {
-            const firstPhoto = [...liste.querySelectorAll("li")].find(entry => isPhotoEntryText(entry.dataset.rawText || entry.dataset.text));
-            if (firstPhoto) liste.insertBefore(li, firstPhoto);
+            const entries = [...liste.querySelectorAll("li")];
+            const firstText = entries.find(entry => !isPhotoEntryText(entry.dataset.rawText || entry.dataset.text));
+            const firstPhoto = entries.find(entry => isPhotoEntryText(entry.dataset.rawText || entry.dataset.text));
+            if (firstText) liste.insertBefore(li, firstText);
+            else if (firstPhoto) liste.insertBefore(li, firstPhoto);
             else liste.appendChild(li);
         }
         return;
