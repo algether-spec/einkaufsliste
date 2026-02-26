@@ -6,7 +6,7 @@ window.addEventListener("load", () => {
     const splash = document.getElementById("splash");
     setTimeout(() => {
         if (splash) splash.remove();
-    }, 2600);
+    }, 350);
 
     setTimeout(autoResize, 200);
 });
@@ -51,7 +51,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.90";
+const APP_VERSION = "1.0.91";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};

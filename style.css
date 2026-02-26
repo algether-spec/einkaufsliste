@@ -686,13 +686,13 @@ nav button:not(.active) {
     align-items: center;
     justify-content: center;
     z-index: 9999;
-    animation: splashFadeOut 0.8s ease forwards;
-    animation-delay: 2.2s;
+    animation: splashFadeOut 0.18s ease forwards;
+    animation-delay: 0.18s;
 }
 
 .splash-cart {
     font-size: 80px;
-    animation: cartRoll 1.2s ease-out forwards;
+    animation: cartRoll 0.28s ease-out forwards;
     margin-bottom: 20px;
     opacity: 0;
 }
@@ -702,8 +702,8 @@ nav button:not(.active) {
     font-size: 28px;
     font-weight: 700;
     opacity: 0;
-    animation: titleFade 1s ease forwards;
-    animation-delay: 0.9s;
+    animation: titleFade 0.18s ease forwards;
+    animation-delay: 0.05s;
 }
 
 .splash-sub {
@@ -711,8 +711,8 @@ nav button:not(.active) {
     font-size: 14px;
     margin-top: 6px;
     opacity: 0;
-    animation: subFade 1s ease forwards;
-    animation-delay: 1.4s;
+    animation: subFade 0.18s ease forwards;
+    animation-delay: 0.1s;
 }
 
 /* Animationen */
