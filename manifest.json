@@ -1,7 +1,7 @@
 {
-  "name": "Erinnerungen",
-  "short_name": "Erinn.",
-  "description": "Einfache Erinnerungen für den Alltag",
+  "name": "Einkaufen",
+  "short_name": "Eink.",
+  "description": "Einfache Einkaufsliste fuer den Alltag",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
