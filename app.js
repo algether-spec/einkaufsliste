@@ -51,7 +51,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.82";
+const APP_VERSION = "1.0.83";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -415,21 +415,53 @@ function getGroupIndex(text) {
     return GROUP_ORDER.length;
 }
 
+function isPhotoEntryText(text) {
+    return String(text || "").startsWith(IMAGE_ENTRY_PREFIX);
+}
+
+function sortListByCaptureTextFirst() {
+    const daten = normalizeListData(datenAusListeLesen());
+    if (!daten.length) return false;
+
+    const offeneTexte = daten.filter(e => !e.erledigt && !isPhotoEntryText(e.text));
+    const offeneFotos = daten.filter(e => !e.erledigt && isPhotoEntryText(e.text));
+    const erledigte = daten.filter(e => e.erledigt);
+
+    const sortierte = [...offeneTexte, ...offeneFotos, ...erledigte].map((e, index) => ({
+        itemId: e.itemId,
+        text: e.text,
+        erledigt: e.erledigt,
+        position: index
+    }));
+
+    datenInListeSchreiben(sortierte);
+    speichernLokal(sortierte);
+    return true;
+}
+
 function sortListByStoreGroups() {
     const daten = normalizeListData(datenAusListeLesen());
     if (!daten.length) return false;
 
-    const offene = daten.filter(e => !e.erledigt);
-    const erledigte = daten.filter(e => e.erledigt);
+    const offeneTexte = daten.filter(e => !e.erledigt && !isPhotoEntryText(e.text));
+    const offeneFotos = daten.filter(e => !e.erledigt && isPhotoEntryText(e.text));
+    const erledigteTexte = daten.filter(e => e.erledigt && !isPhotoEntryText(e.text));
+    const erledigteFotos = daten.filter(e => e.erledigt && isPhotoEntryText(e.text));
     const collator = new Intl.Collator("de", { sensitivity: "base" });
 
-    offene.sort((a, b) => {
+    offeneTexte.sort((a, b) => {
         const groupDiff = getGroupIndex(a.text) - getGroupIndex(b.text);
         if (groupDiff !== 0) return groupDiff;
         return collator.compare(a.text, b.text);
     });
 
-    const sortierte = [...offene, ...erledigte].map((e, index) => ({
+    erledigteTexte.sort((a, b) => {
+        const groupDiff = getGroupIndex(a.text) - getGroupIndex(b.text);
+        if (groupDiff !== 0) return groupDiff;
+        return collator.compare(a.text, b.text);
+    });
+
+    const sortierte = [...offeneTexte, ...offeneFotos, ...erledigteTexte, ...erledigteFotos].map((e, index) => ({
         itemId: e.itemId,
         text: e.text,
         erledigt: e.erledigt,
@@ -1118,18 +1150,27 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId()) {
         if (modus !== "einkaufen") return;
 
         li.classList.toggle("erledigt");
-        speichern();
-
-        if (li.classList.contains("erledigt")) {
-            liste.appendChild(li);
-        } else {
-            liste.insertBefore(li, liste.firstChild);
-        }
+        if (sortListByStoreGroups()) speichern();
+        else speichern();
     };
 
-    erledigt
-        ? liste.appendChild(li)
-        : liste.insertBefore(li, liste.firstChild);
+    if (erledigt) {
+        liste.appendChild(li);
+        return;
+    }
+
+    if (modus === "erfassen") {
+        if (isPhotoEntryText(rawText)) {
+            liste.appendChild(li);
+        } else {
+            const firstPhoto = [...liste.querySelectorAll("li")].find(entry => isPhotoEntryText(entry.dataset.rawText || entry.dataset.text));
+            if (firstPhoto) liste.insertBefore(li, firstPhoto);
+            else liste.appendChild(li);
+        }
+        return;
+    }
+
+    liste.insertBefore(li, liste.firstChild);
 }
 
 
@@ -1512,6 +1553,7 @@ function setModus(neu) {
 
     if (vorher === "einkaufen" && neu === "erfassen") {
         liste.querySelectorAll("li.erledigt").forEach(li => li.remove());
+        sortListByCaptureTextFirst();
         speichern(true);
     }
 }
