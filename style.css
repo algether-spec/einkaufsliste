@@ -348,6 +348,12 @@ button:disabled {
     gap: 8px;
 }
 
+.version-subline {
+    margin: 0 10px 6px;
+    font-size: 11px;
+    color: #9ca3af;
+}
+
 .update-button {
     min-height: 32px;
     padding: 6px 10px;
