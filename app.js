@@ -51,7 +51,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.83";
+const APP_VERSION = "1.0.84";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -461,7 +461,7 @@ function sortListByStoreGroups() {
         return collator.compare(a.text, b.text);
     });
 
-    const sortierte = [...offeneTexte, ...offeneFotos, ...erledigteTexte, ...erledigteFotos].map((e, index) => ({
+    const sortierte = [...offeneTexte, ...erledigteTexte, ...offeneFotos, ...erledigteFotos].map((e, index) => ({
         itemId: e.itemId,
         text: e.text,
         erledigt: e.erledigt,
@@ -1192,6 +1192,7 @@ function mehrzeilenSpeichern() {
         .filter(Boolean)
         .forEach(item => eintragAnlegen(item));
 
+    if (modus === "einkaufen") sortListByStoreGroups();
     speichern();
     multiInput.value = "";
     autoResize();
@@ -1264,6 +1265,7 @@ async function addPhotoAsListItem(file) {
         const imageSrc = await readFileAsDataUrl(file);
         const optimizedImageSrc = await optimizePhotoDataUrl(imageSrc);
         eintragAnlegen(buildPhotoEntryText(optimizedImageSrc));
+        if (modus === "einkaufen") sortListByStoreGroups();
         speichern();
         if (multiInput?.value?.trim()) {
             setMicStatus("Foto gespeichert. Text bleibt im Feld und kann mit Übernehmen gespeichert werden.");
