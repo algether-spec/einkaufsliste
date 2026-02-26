@@ -51,7 +51,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.79";
+const APP_VERSION = "1.0.80";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -1526,14 +1526,12 @@ btnEinkaufen.onclick = () => setModus("einkaufen");
 
 btnExport.onclick = async () => {
     const text = [...liste.querySelectorAll("li")]
-        .map(li => {
-            const raw = String(li.dataset.rawText || li.dataset.text || "");
-            const parsedPhoto = parsePhotoEntryText(raw);
-            const label = parsedPhoto
-                ? (parsedPhoto.caption ? `[Foto] ${parsedPhoto.caption}` : "[Foto]")
-                : raw;
-            return (li.classList.contains("erledigt") ? "✔ " : "• ") + label;
-        })
+        .map(li => ({
+            erledigt: li.classList.contains("erledigt"),
+            raw: String(li.dataset.rawText || li.dataset.text || "")
+        }))
+        .filter(item => item.raw && !item.raw.startsWith(IMAGE_ENTRY_PREFIX))
+        .map(item => (item.erledigt ? "✔ " : "• ") + item.raw)
         .join("\n");
 
     if (navigator.share) {
