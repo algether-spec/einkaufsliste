@@ -51,7 +51,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.84";
+const APP_VERSION = "1.0.85";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -800,6 +800,16 @@ function datenInListeSchreiben(daten) {
     daten.forEach(e => eintragAnlegen(e.text, e.erledigt, e.itemId));
 }
 
+function applyModeSortAfterLoad() {
+    if (modus === "einkaufen") {
+        sortListByStoreGroups();
+        return;
+    }
+    if (modus === "erfassen") {
+        sortListByCaptureTextFirst();
+    }
+}
+
 function speichernLokal(daten) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(daten));
 }
@@ -923,7 +933,8 @@ async function syncRemoteIfNeeded(forceOverwrite = false) {
                         datenZumSpeichern = mergeListConflict(lokaleDaten, remoteDaten);
                         if (listDataSignature(datenZumSpeichern) !== listDataSignature(lokaleDaten)) {
                             datenInListeSchreiben(datenZumSpeichern);
-                            speichernLokal(datenZumSpeichern);
+                            applyModeSortAfterLoad();
+                            speichernLokal(datenAusListeLesen());
                             setAuthStatus("Konflikt erkannt: Listen wurden zusammengefuehrt.");
                         }
                     }
@@ -965,7 +976,8 @@ async function refreshFromRemoteIfChanged() {
 
         if (listDataSignature(normalizedRemote) !== listDataSignature(lokaleDaten)) {
             datenInListeSchreiben(normalizedRemote);
-            speichernLokal(normalizedRemote);
+            applyModeSortAfterLoad();
+            speichernLokal(datenAusListeLesen());
             setAuthStatus("Liste von anderem Geraet aktualisiert.");
         }
 
@@ -1013,6 +1025,7 @@ async function laden() {
         setSyncStatus("Sync: Lokal", "offline");
         updateSyncDebug();
         datenInListeSchreiben(lokaleDaten);
+        applyModeSortAfterLoad();
         return;
     }
 
@@ -1020,7 +1033,8 @@ async function laden() {
         const remoteDaten = await ladenRemote();
         if (remoteDaten && remoteDaten.length > 0) {
             datenInListeSchreiben(remoteDaten);
-            speichernLokal(remoteDaten);
+            applyModeSortAfterLoad();
+            speichernLokal(datenAusListeLesen());
             localDirty = false;
             setSyncStatus("Sync: Verbunden", "ok");
             lastSyncAt = formatTimeIso(new Date());
@@ -1029,6 +1043,7 @@ async function laden() {
         }
 
         datenInListeSchreiben(lokaleDaten);
+        applyModeSortAfterLoad();
         if (lokaleDaten.length > 0) void syncRemoteIfNeeded();
         else {
             localDirty = false;
@@ -1041,6 +1056,7 @@ async function laden() {
         setInputErrorStatus(getSyncErrorHint(err));
         updateSyncDebug();
         datenInListeSchreiben(lokaleDaten);
+        applyModeSortAfterLoad();
         localDirty = true;
     }
 }
@@ -1643,4 +1659,5 @@ if (supabaseClient) {
     setSyncStatus("Sync: Lokal", "offline");
     updateSyncDebug();
     datenInListeSchreiben(ladenLokal());
+    applyModeSortAfterLoad();
 }
