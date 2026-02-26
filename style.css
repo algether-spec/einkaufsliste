@@ -350,7 +350,8 @@ button:disabled {
 
 .version-subline {
     margin: 0 10px 6px;
-    font-size: 11px;
+    text-align: left;
+    font-size: 12px;
     color: #9ca3af;
 }
 
