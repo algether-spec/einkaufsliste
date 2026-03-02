@@ -51,7 +51,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.94";
+const APP_VERSION = "1.0.95";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -616,6 +616,12 @@ async function activateWaitingServiceWorker(registration) {
 }
 
 async function forceAppUpdate() {
+    if (hasPendingUpdateRisk()) {
+        setSyncStatus("Update blockiert: erst speichern/syncen", "warn");
+        setAuthStatus("Bitte erst 'Uebernehmen' druecken und auf 'Sync: Verbunden' warten.");
+        return;
+    }
+
     if (btnForceUpdate) btnForceUpdate.disabled = true;
     setSyncStatus("Update: wird angewendet...", "warn");
 
@@ -666,6 +672,16 @@ function hasActiveEditingState() {
         || (multiInput && multiInput.value.trim().length > 0)
         || localDirty
         || remoteSyncInFlight
+    );
+}
+
+function hasPendingUpdateRisk() {
+    return Boolean(
+        isListening
+        || (multiInput && multiInput.value.trim().length > 0)
+        || localDirty
+        || remoteSyncInFlight
+        || remoteSyncQueued
     );
 }
 
