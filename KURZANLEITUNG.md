@@ -44,3 +44,24 @@
 - Prüfen, ob auf beiden Geräten derselbe Code gesetzt ist.
 - Internetverbindung prüfen.
 - Einmal `Update` drücken und App neu laden.
+
+## 10) Versions- und Dateinamen (wichtig gegen Verwechslungen)
+- Projektordner immer gleich lassen: `Einkausliste`
+- Backup-Ordner mit Version + Datum benennen: `Einkaufsliste_Backup_V01_2026-02-26`
+- Export-Dateien mit Version benennen: `Einkaufsliste_V01.json`
+- Optional Export mit Datum: `Einkaufsliste_V02_2026-02-26.json`
+- Git-Tags für feste Stände verwenden: `v0.1.0`, `v0.2.0`, `v0.2.1`
+- Versionen (`V01`, `V02`, `V03`) nur bewusst hochzählen
+- Datum immer im Format `YYYY-MM-DD` verwenden
+
+### Beispiel (aktueller Stand)
+- Arbeitsordner: `Einkausliste`
+- Nächste Sicherung: `Einkaufsliste_Backup_V01_2026-02-26`
+- Export-Datei: `Einkaufsliste_V01_2026-02-26.json`
+
+## 11) Rücksicherung (zu einer Sicherung zurückgehen)
+- Vor dem Zurückgehen immer zuerst den aktuellen Stand als neues Backup sichern (z. B. `Einkaufsliste_Backup_V02_2026-02-26`).
+- Danach den gewünschten Sicherungsordner auswählen (z. B. `Einkaufsliste_Backup_V01_2026-02-26`).
+- Entweder nur einzelne Dateien zurückkopieren (`index.html`, `app.js`, `service-worker.js`) oder den ganzen Projektordner ersetzen.
+- Nach einer Rücksicherung die App neu laden und mit `Update` den neuesten Stand auf dem Gerät aktivieren.
+- Wenn unsicher: nicht überschreiben, sondern erst vergleichen.
