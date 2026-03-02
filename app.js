@@ -51,7 +51,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.92";
+const APP_VERSION = "1.0.93";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -59,6 +59,7 @@ const STORAGE_KEY = "einkaufsliste";
 const SUPABASE_TABLE = "shopping_items";
 const SUPABASE_CODES_TABLE = "sync_codes";
 const SYNC_CODE_KEY = "einkaufsliste-sync-code";
+const SYNC_BASELINE_PREFIX = "einkaufsliste-sync-baseline:";
 const IMAGE_ENTRY_PREFIX = "__IMG__:";
 const IMAGE_ENTRY_CAPTION_MARKER = "\n__CAPTION__:";
 
@@ -390,6 +391,34 @@ function listDataSignature(daten) {
     );
 }
 
+function getSyncBaselineStorageKey() {
+    if (!currentSyncCode) return "";
+    return SYNC_BASELINE_PREFIX + currentSyncCode;
+}
+
+function loadSyncedItemIdSet() {
+    const key = getSyncBaselineStorageKey();
+    if (!key) return new Set();
+
+    const raw = localStorage.getItem(key);
+    if (!raw) return new Set();
+
+    try {
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return new Set();
+        return new Set(parsed.map(id => String(id || "").trim()).filter(Boolean));
+    } catch {
+        return new Set();
+    }
+}
+
+function saveSyncedItemIdSet(daten) {
+    const key = getSyncBaselineStorageKey();
+    if (!key) return;
+    const ids = normalizeListData(daten).map(item => item.itemId);
+    localStorage.setItem(key, JSON.stringify(ids));
+}
+
 function generateItemId() {
     if (window.crypto?.randomUUID) return window.crypto.randomUUID();
     return `item-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
@@ -473,25 +502,45 @@ function sortListByStoreGroups() {
     return true;
 }
 
-function mergeListConflict(localDaten, remoteDaten) {
+function mergeListConflict(localDaten, remoteDaten, syncedItemIdSet = new Set()) {
     const local = normalizeListData(localDaten);
     const remote = normalizeListData(remoteDaten);
-    const merged = [];
-    const seenById = new Set();
+    const localById = new Map(local.map(item => [item.itemId, item]));
+    const merged = remote.map((remoteItem, index) => {
+        const localItem = localById.get(remoteItem.itemId);
+        if (localItem) {
+            return {
+                itemId: localItem.itemId,
+                text: localItem.text,
+                erledigt: localItem.erledigt,
+                position: index
+            };
+        }
+        return {
+            itemId: remoteItem.itemId,
+            text: remoteItem.text,
+            erledigt: remoteItem.erledigt,
+            position: index
+        };
+    });
 
     for (const item of local) {
-        if (seenById.has(item.itemId)) continue;
-        seenById.add(item.itemId);
-        merged.push({ itemId: item.itemId, text: item.text, erledigt: item.erledigt, position: merged.length });
+        const existsRemotely = remote.some(remoteItem => remoteItem.itemId === item.itemId);
+        if (existsRemotely) continue;
+
+        // Wenn ein Item frueher bereits synchron war und nun remote fehlt,
+        // behandeln wir das als Remote-Loeschung und holen es nicht zurueck.
+        if (syncedItemIdSet.has(item.itemId)) continue;
+
+        merged.push({
+            itemId: item.itemId,
+            text: item.text,
+            erledigt: item.erledigt,
+            position: merged.length
+        });
     }
 
-    for (const item of remote) {
-        if (seenById.has(item.itemId)) continue;
-        seenById.add(item.itemId);
-        merged.push({ itemId: item.itemId, text: item.text, erledigt: item.erledigt, position: merged.length });
-    }
-
-    return merged;
+    return merged.map((item, index) => ({ ...item, position: index }));
 }
 
 function shortUserId(id) {
@@ -930,7 +979,8 @@ async function syncRemoteIfNeeded(forceOverwrite = false) {
                 if (Array.isArray(remoteVorher)) {
                     const remoteDaten = normalizeListData(remoteVorher);
                     if (listDataSignature(lokaleDaten) !== listDataSignature(remoteDaten)) {
-                        datenZumSpeichern = mergeListConflict(lokaleDaten, remoteDaten);
+                        const syncedItemIdSet = loadSyncedItemIdSet();
+                        datenZumSpeichern = mergeListConflict(lokaleDaten, remoteDaten, syncedItemIdSet);
                         if (listDataSignature(datenZumSpeichern) !== listDataSignature(lokaleDaten)) {
                             datenInListeSchreiben(datenZumSpeichern);
                             applyModeSortAfterLoad();
@@ -942,6 +992,7 @@ async function syncRemoteIfNeeded(forceOverwrite = false) {
             }
 
             await speichernRemote(datenZumSpeichern, { allowRemoteDeletes: overwriteThisRun });
+            saveSyncedItemIdSet(datenZumSpeichern);
         } while (remoteSyncQueued);
         lastSyncAt = formatTimeIso(new Date());
         localDirty = false;
@@ -978,6 +1029,7 @@ async function refreshFromRemoteIfChanged() {
             datenInListeSchreiben(normalizedRemote);
             applyModeSortAfterLoad();
             speichernLokal(datenAusListeLesen());
+            saveSyncedItemIdSet(normalizedRemote);
             setAuthStatus("Liste von anderem Geraet aktualisiert.");
         }
 
@@ -1035,6 +1087,7 @@ async function laden() {
             datenInListeSchreiben(remoteDaten);
             applyModeSortAfterLoad();
             speichernLokal(datenAusListeLesen());
+            saveSyncedItemIdSet(remoteDaten);
             localDirty = false;
             setSyncStatus("Sync: Verbunden", "ok");
             lastSyncAt = formatTimeIso(new Date());
