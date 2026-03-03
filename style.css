@@ -158,6 +158,17 @@ header {
     font-weight: 700;
 }
 
+.sync-code-share {
+    min-height: 28px;
+    padding: 4px 10px;
+    border-radius: 8px;
+    border: 1px solid #2563eb;
+    background: #eff6ff;
+    color: #2563eb;
+    font-size: 12px;
+    font-weight: 700;
+}
+
 /* Hauptbereich */
 main {
     flex: 1;

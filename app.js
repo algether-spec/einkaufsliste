@@ -25,6 +25,7 @@ const btnForceUpdate = document.getElementById("btn-force-update");
 const syncCodeCompact = document.getElementById("sync-code-compact");
 const btnSyncCodeDisplay = document.getElementById("btn-sync-code-display");
 const btnSyncCodeEdit = document.getElementById("btn-sync-code-edit");
+const btnSyncCodeShare = document.getElementById("btn-sync-code-share");
 const modeBadge    = document.getElementById("mode-badge");
 const versionBadge = document.getElementById("version-badge");
 const syncStatus   = document.getElementById("sync-status");
@@ -51,7 +52,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.103";
+const APP_VERSION = "1.0.104";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -425,6 +426,40 @@ function setupSyncCodeUi() {
 
     if (btnSyncCodeDisplay) {
         btnSyncCodeDisplay.onclick = () => openSyncEditorFromUser();
+    }
+
+    if (btnSyncCodeShare) {
+        btnSyncCodeShare.onclick = () => void shareSyncCode();
+    }
+}
+
+async function shareSyncCode() {
+    if (!currentSyncCode || !isValidSyncCode(currentSyncCode)) {
+        setAuthStatus("Kein gültiger Code zum Teilen vorhanden.");
+        return;
+    }
+    const shareUrl = new URL(location.origin + location.pathname);
+    shareUrl.searchParams.set("code", currentSyncCode);
+    const url = shareUrl.toString();
+
+    if (navigator.share) {
+        try {
+            await navigator.share({
+                title: "Einkaufsliste",
+                text: `Tritt meiner Einkaufsliste bei! Code: ${currentSyncCode}`,
+                url
+            });
+            return;
+        } catch (err) {
+            if (err.name === "AbortError") return; // Benutzer hat abgebrochen
+        }
+    }
+
+    if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+        setAuthStatus("Link kopiert! Zum Einfügen gedrückt halten.");
+    } else {
+        prompt("Link kopieren:", url);
     }
 }
 
@@ -1963,6 +1998,17 @@ if (btnMic && !SpeechRecognitionCtor) {
 }
 
 setupSyncCodeUi();
+
+// ?code=XXXX in der URL → automatisch verbinden (z.B. aus geteiltem Link)
+const _urlCode = new URLSearchParams(location.search).get("code");
+if (_urlCode) {
+    const _cleanUrl = new URL(location.href);
+    _cleanUrl.searchParams.delete("code");
+    _cleanUrl.searchParams.delete("u");
+    history.replaceState(null, "", _cleanUrl.toString());
+    void applySyncCode(_urlCode, true, { allowOccupied: true, userInitiated: true });
+}
+
 if (btnForceUpdate) btnForceUpdate.onclick = () => void forceAppUpdate();
 setupAutoUpdateChecks();
 
