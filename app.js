@@ -51,7 +51,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.99";
+const APP_VERSION = "1.0.100";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -737,6 +737,22 @@ function reloadWithCacheBust() {
     location.replace(url.toString());
 }
 
+function waitForSwInstalled(worker, timeoutMs = 10000) {
+    if (!worker || worker.state === "installed" || worker.state === "redundant") {
+        return Promise.resolve();
+    }
+    return new Promise(resolve => {
+        const handler = () => {
+            if (worker.state === "installed" || worker.state === "redundant") {
+                worker.removeEventListener("statechange", handler);
+                resolve();
+            }
+        };
+        worker.addEventListener("statechange", handler);
+        setTimeout(() => { worker.removeEventListener("statechange", handler); resolve(); }, timeoutMs);
+    });
+}
+
 function waitForControllerChange(timeoutMs = 4500) {
     return new Promise(resolve => {
         let finished = false;
@@ -776,6 +792,10 @@ async function forceAppUpdate() {
 
             for (const registration of registrations) {
                 await registration.update();
+                // Warten bis neue SW fertig installiert ist, bevor aktiviert wird
+                if (!registration.waiting && registration.installing) {
+                    await waitForSwInstalled(registration.installing);
+                }
                 if (await activateWaitingServiceWorker(registration)) {
                     setSyncStatus("Update: aktiv", "ok");
                     reloadWithCacheBust();
@@ -833,7 +853,13 @@ async function hasWaitingServiceWorkerUpdate() {
     if (!("serviceWorker" in navigator)) return false;
     const registrations = await navigator.serviceWorker.getRegistrations();
     for (const registration of registrations) {
+        if (registration.waiting) return true;
         await registration.update();
+        if (registration.waiting) return true;
+        // Neue SW lädt noch (installing) – warten bis fertig installiert
+        if (registration.installing) {
+            await waitForSwInstalled(registration.installing);
+        }
         if (registration.waiting) return true;
     }
     return false;
@@ -1026,7 +1052,7 @@ function applyModeSortAfterLoad() {
 
 function speichernLokal(daten) {
     const stripped = daten.map(item => {
-        if (!isPhotoEntry(item.text)) return item;
+        if (!isPhotoEntryText(item.text)) return item;
         const parsed = parsePhotoEntryText(item.text);
         if (!parsed?.imageSrc?.startsWith("data:")) return item; // bereits eine IDB-Referenz
         savePhotoToIdb(item.itemId, parsed.imageSrc).catch(err => console.warn("Foto-IDB Schreibfehler:", err));
