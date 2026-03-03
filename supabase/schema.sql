@@ -507,3 +507,43 @@ $$;
 
 revoke all on function public.apply_shopping_ops(text, text, jsonb) from public;
 grant execute on function public.apply_shopping_ops(text, text, jsonb) to authenticated;
+
+-- =============================
+-- Retention: Alte Daten aufräumen (manuell oder als Cron-Job)
+-- =============================
+
+create or replace function public.cleanup_old_data()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_tombstones integer;
+  v_ops integer;
+begin
+  -- Soft-delete-Tombstones nach 90 Tagen permanent löschen
+  delete from public.shopping_items
+  where deleted_at is not null
+    and deleted_at < now() - interval '90 days';
+  get diagnostics v_tombstones = row_count;
+
+  -- Angewendete Ops-Logs nach 90 Tagen löschen
+  delete from public.shopping_item_applied_ops
+  where applied_at < now() - interval '90 days';
+  get diagnostics v_ops = row_count;
+
+  return jsonb_build_object(
+    'tombstones_deleted', v_tombstones,
+    'ops_deleted', v_ops
+  );
+end;
+$$;
+
+revoke all on function public.cleanup_old_data() from public;
+grant execute on function public.cleanup_old_data() to authenticated;
+
+-- Aufruf (manuell in Supabase SQL-Editor):
+-- select public.cleanup_old_data();
+-- Als Cron-Job (Supabase Dashboard → Database → Scheduled jobs → täglich):
+-- select public.cleanup_old_data();

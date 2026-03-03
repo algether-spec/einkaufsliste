@@ -51,7 +51,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.97";
+const APP_VERSION = "1.0.98";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -65,6 +65,7 @@ const SYNC_OP_BATCH_SIZE = 200;
 const TOMBSTONE_TEXT = "[deleted]";
 const IMAGE_ENTRY_PREFIX = "__IMG__:";
 const IMAGE_ENTRY_CAPTION_MARKER = "\n__CAPTION__:";
+const IMAGE_IDB_REF_PREFIX = "__IMG_IDB__:";
 
 function parsePhotoEntryText(rawText) {
     const raw = String(rawText || "");
@@ -86,6 +87,40 @@ function buildPhotoEntryText(imageSrc, caption = "") {
     const cap = String(caption || "").trim();
     return cap ? (IMAGE_ENTRY_PREFIX + img + IMAGE_ENTRY_CAPTION_MARKER + cap) : (IMAGE_ENTRY_PREFIX + img);
 }
+
+// IndexedDB-basierter Photo-Store (verhindert localStorage-Überlauf bei großen Fotos)
+const PHOTO_IDB_NAME = "einkaufsliste-photos";
+const PHOTO_IDB_STORE = "photos";
+let _photoDb = null;
+
+function openPhotoDb() {
+    if (_photoDb) return Promise.resolve(_photoDb);
+    return new Promise((resolve, reject) => {
+        const req = indexedDB.open(PHOTO_IDB_NAME, 1);
+        req.onupgradeneeded = e => e.target.result.createObjectStore(PHOTO_IDB_STORE);
+        req.onsuccess = e => { _photoDb = e.target.result; resolve(_photoDb); };
+        req.onerror = () => reject(req.error);
+    });
+}
+
+function savePhotoToIdb(itemId, dataUrl) {
+    return openPhotoDb().then(db => new Promise((resolve, reject) => {
+        const tx = db.transaction(PHOTO_IDB_STORE, "readwrite");
+        tx.objectStore(PHOTO_IDB_STORE).put(dataUrl, itemId);
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+    }));
+}
+
+function loadPhotoFromIdb(itemId) {
+    return openPhotoDb().then(db => new Promise(resolve => {
+        const tx = db.transaction(PHOTO_IDB_STORE, "readonly");
+        const req = tx.objectStore(PHOTO_IDB_STORE).get(itemId);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => resolve(null);
+    }));
+}
+
 const SYNC_CODE_LENGTH = 8;
 const RESERVED_SYNC_CODE = "HELP0000";
 const BACKGROUND_SYNC_INTERVAL_MS = 4000;
@@ -132,11 +167,13 @@ const MIC_SESSION_MS = 30000;
 let skipAutoSaveForCurrentBuffer = false;
 let ignoreResultsUntil = 0;
 let restartMicAfterManualCommit = false;
-let remoteSyncInFlight = false;
-let remoteSyncQueued = false;
-let remoteSyncForceOverwrite = false;
-let remotePullInFlight = false;
-let localDirty = false;
+// Sync-Zustand gebündelt – verhindert verstreute Mutations an Einzelvariablen
+const syncState = {
+    lock: Promise.resolve(),  // Promise-Chain-Lock für syncRemoteIfNeeded
+    pending: false,           // true = mindestens 1 Sync-Runde in der Queue
+    pullInFlight: false,      // true = refreshFromRemoteIfChanged läuft
+    dirty: false              // true = lokale Änderungen noch nicht bestätigt gesynct
+};
 let supabaseReady = false;
 let supabaseUserId = "";
 let lastSyncAt = "";
@@ -149,6 +186,7 @@ let remoteRealtimeTimer = null;
 let autoUpdateCheckTimer = null;
 let autoUpdateInProgress = false;
 let applyingRemoteSnapshot = false;
+let _speichernSyncTimer = null;
 
 if (authBar) {
     authBar.hidden = true;
@@ -777,8 +815,8 @@ function hasActiveEditingState() {
     return Boolean(
         isListening
         || (multiInput && multiInput.value.trim().length > 0)
-        || localDirty
-        || remoteSyncInFlight
+        || syncState.dirty
+        || syncState.pending
     );
 }
 
@@ -786,9 +824,8 @@ function hasPendingUpdateRisk() {
     return Boolean(
         isListening
         || (multiInput && multiInput.value.trim().length > 0)
-        || localDirty
-        || remoteSyncInFlight
-        || remoteSyncQueued
+        || syncState.dirty
+        || syncState.pending
     );
 }
 
@@ -988,17 +1025,25 @@ function applyModeSortAfterLoad() {
 }
 
 function speichernLokal(daten) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(daten));
+    const stripped = daten.map(item => {
+        if (!isPhotoEntry(item.text)) return item;
+        const parsed = parsePhotoEntryText(item.text);
+        if (!parsed?.imageSrc?.startsWith("data:")) return item; // bereits eine IDB-Referenz
+        savePhotoToIdb(item.itemId, parsed.imageSrc).catch(err => console.warn("Foto-IDB Schreibfehler:", err));
+        const ref = IMAGE_IDB_REF_PREFIX + item.itemId + (parsed.caption ? IMAGE_ENTRY_CAPTION_MARKER + parsed.caption : "");
+        return { ...item, text: ref };
+    });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(stripped));
 }
 
-function ladenLokal() {
+async function ladenLokal() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
 
     try {
         const parsed = JSON.parse(raw);
         if (!Array.isArray(parsed)) return [];
-        return parsed
+        const items = parsed
             .map((e, index) => ({
                 itemId: String(e.itemId || e.item_id || "").trim() || generateItemId(),
                 text: String(e.text || ""),
@@ -1006,6 +1051,17 @@ function ladenLokal() {
                 position: Number.isFinite(e.position) ? e.position : index
             }))
             .filter(e => e.text.trim().length > 0);
+
+        return await Promise.all(items.map(async item => {
+            if (!item.text.startsWith(IMAGE_IDB_REF_PREFIX)) return item;
+            const withoutPrefix = item.text.slice(IMAGE_IDB_REF_PREFIX.length);
+            const markerIndex = withoutPrefix.indexOf(IMAGE_ENTRY_CAPTION_MARKER);
+            const refId = markerIndex === -1 ? withoutPrefix : withoutPrefix.slice(0, markerIndex);
+            const caption = markerIndex === -1 ? "" : withoutPrefix.slice(markerIndex + IMAGE_ENTRY_CAPTION_MARKER.length);
+            const dataUrl = await loadPhotoFromIdb(refId || item.itemId);
+            if (dataUrl) return { ...item, text: buildPhotoEntryText(dataUrl, caption) };
+            return item;
+        }));
     } catch (err) {
         console.warn("Fehler beim lokalen Laden:", err);
         return [];
@@ -1092,7 +1148,8 @@ async function fetchRemoteChangesSince(lastRemoteSyncAt) {
         .from(SUPABASE_TABLE)
         .select("item_id, text, erledigt, position, deleted_at, updated_at")
         .eq("sync_code", currentSyncCode)
-        .order("updated_at", { ascending: true });
+        .order("updated_at", { ascending: true })
+        .limit(2000);
 
     if (lastRemoteSyncAt) {
         query = query.gt("updated_at", lastRemoteSyncAt);
@@ -1111,46 +1168,42 @@ async function fetchRemoteChangesSince(lastRemoteSyncAt) {
     }));
 }
 
-async function syncRemoteIfNeeded(forceOverwrite = false) {
-    void forceOverwrite; // Snapshot-Overwrite wird durch operationbasierten Sync ersetzt.
-    if (!supabaseClient) return;
+async function fetchAndApplyRemoteChanges(authStatusMsg) {
+    const meta = loadSyncMeta();
+    const remoteChanges = await fetchRemoteChangesSince(meta.lastRemoteSyncAt);
+    if (remoteChanges.length > 0) {
+        const applied = applyRemoteRowsToSnapshot(meta.snapshot, remoteChanges);
+        meta.snapshot = applied.snapshot;
+        if (applied.latestUpdatedAt) meta.lastRemoteSyncAt = applied.latestUpdatedAt;
+        saveSyncMeta(meta);
+        writeSnapshotToUi(meta.snapshot);
+        setAuthStatus(authStatusMsg);
+    }
+}
+
+function syncRemoteIfNeeded() {
+    if (!supabaseClient) return Promise.resolve();
     if (isNetworkUnavailable()) {
         setInputErrorStatus("");
         setSyncStatus("Sync: Offline (lokal)", "offline");
-        return;
+        return Promise.resolve();
     }
-    if (remoteSyncInFlight) {
-        remoteSyncQueued = true;
-        return;
-    }
-
-    remoteSyncInFlight = true;
-    try {
+    // Bereits eine Sync-Runde in der Queue: kein weiteres Stacking nötig
+    if (syncState.pending) return syncState.lock;
+    syncState.pending = true;
+    syncState.lock = syncState.lock.then(async () => {
+        syncState.pending = false;
         setSyncStatus("Sync: Synchronisiere...", "warn");
-        do {
-            remoteSyncQueued = false;
-            while (await uploadPendingOps()) {
-                // In Batches leeren, damit große Offline-Queues idempotent abgearbeitet werden.
-            }
-
-            const meta = loadSyncMeta();
-            const remoteChanges = await fetchRemoteChangesSince(meta.lastRemoteSyncAt);
-            if (remoteChanges.length > 0) {
-                const applied = applyRemoteRowsToSnapshot(meta.snapshot, remoteChanges);
-                meta.snapshot = applied.snapshot;
-                if (applied.latestUpdatedAt) meta.lastRemoteSyncAt = applied.latestUpdatedAt;
-                saveSyncMeta(meta);
-                writeSnapshotToUi(meta.snapshot);
-                setAuthStatus("Liste synchronisiert.");
-            }
-        } while (remoteSyncQueued);
-
+        // In Batches leeren, damit große Offline-Queues idempotent abgearbeitet werden
+        while (await uploadPendingOps()) { }
+        await fetchAndApplyRemoteChanges("Liste synchronisiert.");
         lastSyncAt = formatTimeIso(new Date());
-        localDirty = loadSyncMeta().pendingOps.length > 0;
+        syncState.dirty = loadSyncMeta().pendingOps.length > 0;
         setInputErrorStatus("");
         setSyncStatus("Sync: Verbunden", "ok");
         updateSyncDebug();
-    } catch (err) {
+    }).catch(err => {
+        syncState.pending = false;
         console.warn("Remote-Sync fehlgeschlagen, lokal bleibt aktiv:", err, formatSupabaseError(err));
         setSyncStatus("Sync: Offline (lokal)", "offline");
         const hint = getSyncErrorHint(err);
@@ -1158,9 +1211,8 @@ async function syncRemoteIfNeeded(forceOverwrite = false) {
             || hint.toLowerCase().includes("netzwerkfehler");
         setInputErrorStatus(isNetworkHint ? "" : hint);
         updateSyncDebug();
-    } finally {
-        remoteSyncInFlight = false;
-    }
+    });
+    return syncState.lock;
 }
 
 async function refreshFromRemoteIfChanged() {
@@ -1170,21 +1222,12 @@ async function refreshFromRemoteIfChanged() {
         setSyncStatus("Sync: Offline (lokal)", "offline");
         return;
     }
-    if (remoteSyncInFlight || remotePullInFlight) return;
+    if (syncState.pending || syncState.pullInFlight) return;
 
-    remotePullInFlight = true;
+    syncState.pullInFlight = true;
     try {
-        const meta = loadSyncMeta();
-        if (meta.pendingOps.length > 0) return;
-        const remoteChanges = await fetchRemoteChangesSince(meta.lastRemoteSyncAt);
-        if (remoteChanges.length > 0) {
-            const applied = applyRemoteRowsToSnapshot(meta.snapshot, remoteChanges);
-            meta.snapshot = applied.snapshot;
-            if (applied.latestUpdatedAt) meta.lastRemoteSyncAt = applied.latestUpdatedAt;
-            saveSyncMeta(meta);
-            writeSnapshotToUi(meta.snapshot);
-            setAuthStatus("Liste von anderem Geraet aktualisiert.");
-        }
+        if (loadSyncMeta().pendingOps.length > 0) return;
+        await fetchAndApplyRemoteChanges("Liste von anderem Geraet aktualisiert.");
 
         lastSyncAt = formatTimeIso(new Date());
         setInputErrorStatus("");
@@ -1199,8 +1242,20 @@ async function refreshFromRemoteIfChanged() {
         setInputErrorStatus(isNetworkHint ? "" : hint);
         updateSyncDebug();
     } finally {
-        remotePullInFlight = false;
+        syncState.pullInFlight = false;
     }
+}
+
+function _onSyncFocus() {
+    if (isNetworkUnavailable()) return;
+    void refreshFromRemoteIfChanged();
+}
+function _onSyncOnline() {
+    void autoReconnectAndSync();
+    void refreshFromRemoteIfChanged();
+}
+function _onSyncVisibilityChange() {
+    if (!document.hidden && !isNetworkUnavailable()) void refreshFromRemoteIfChanged();
 }
 
 function startBackgroundSync() {
@@ -1213,17 +1268,12 @@ function startBackgroundSync() {
         void refreshFromRemoteIfChanged();
     }, BACKGROUND_SYNC_INTERVAL_MS);
 
-    window.addEventListener("focus", () => {
-        if (isNetworkUnavailable()) return;
-        void refreshFromRemoteIfChanged();
-    });
-    window.addEventListener("online", () => {
-        void autoReconnectAndSync();
-        void refreshFromRemoteIfChanged();
-    });
-    document.addEventListener("visibilitychange", () => {
-        if (!document.hidden && !isNetworkUnavailable()) void refreshFromRemoteIfChanged();
-    });
+    window.removeEventListener("focus", _onSyncFocus);
+    window.addEventListener("focus", _onSyncFocus);
+    window.removeEventListener("online", _onSyncOnline);
+    window.addEventListener("online", _onSyncOnline);
+    document.removeEventListener("visibilitychange", _onSyncVisibilityChange);
+    document.addEventListener("visibilitychange", _onSyncVisibilityChange);
 }
 
 function speichern(forceOverwrite = false) {
@@ -1231,12 +1281,13 @@ function speichern(forceOverwrite = false) {
     const daten = datenAusListeLesen();
     speichernLokal(daten);
     const queued = queueChangeOps(daten);
-    localDirty = queued || loadSyncMeta().pendingOps.length > 0;
-    void syncRemoteIfNeeded();
+    syncState.dirty = queued || loadSyncMeta().pendingOps.length > 0;
+    clearTimeout(_speichernSyncTimer);
+    _speichernSyncTimer = setTimeout(() => void syncRemoteIfNeeded(), 300);
 }
 
 async function laden() {
-    const lokaleDaten = ladenLokal();
+    const lokaleDaten = await ladenLokal();
 
     if (!supabaseClient) {
         setSyncStatus("Sync: Lokal", "offline");
@@ -1268,7 +1319,7 @@ async function laden() {
 
         writeSnapshotToUi(meta.snapshot.length ? meta.snapshot : lokaleDaten);
         await syncRemoteIfNeeded();
-        localDirty = loadSyncMeta().pendingOps.length > 0;
+        syncState.dirty = loadSyncMeta().pendingOps.length > 0;
         setSyncStatus("Sync: Verbunden", "ok");
         lastSyncAt = formatTimeIso(new Date());
         updateSyncDebug();
@@ -1278,7 +1329,7 @@ async function laden() {
         setInputErrorStatus(getSyncErrorHint(err));
         updateSyncDebug();
         writeSnapshotToUi(lokaleDaten);
-        localDirty = loadSyncMeta().pendingOps.length > 0;
+        syncState.dirty = loadSyncMeta().pendingOps.length > 0;
     }
 }
 
@@ -1296,7 +1347,8 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId()) {
 
     if (rawText.startsWith(IMAGE_ENTRY_PREFIX)) {
         const parsedPhoto = parsePhotoEntryText(rawText) || { imageSrc: "", caption: "" };
-        const imageSrc = parsedPhoto.imageSrc;
+        const rawImageSrc = parsedPhoto.imageSrc;
+        const imageSrc = String(rawImageSrc || "").startsWith("data:image/") ? rawImageSrc : "";
         let photoCaption = String(parsedPhoto.caption || "").trim();
 
         const wrapper = document.createElement("div");
@@ -1882,6 +1934,8 @@ if (supabaseClient) {
 } else {
     setSyncStatus("Sync: Lokal", "offline");
     updateSyncDebug();
-    datenInListeSchreiben(ladenLokal());
-    applyModeSortAfterLoad();
+    void ladenLokal().then(daten => {
+        datenInListeSchreiben(daten);
+        applyModeSortAfterLoad();
+    });
 }
