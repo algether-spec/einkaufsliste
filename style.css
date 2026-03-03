@@ -5,6 +5,9 @@
     --done: #9ca3af;
 }
 
+/* Garantiert dass [hidden] immer gewinnt, auch gegen display:grid/flex */
+[hidden] { display: none !important; }
+
 /* Grundlayout */
 * {
     box-sizing: border-box;

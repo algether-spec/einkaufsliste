@@ -51,7 +51,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.100";
+const APP_VERSION = "1.0.101";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -188,10 +188,7 @@ let autoUpdateInProgress = false;
 let applyingRemoteSnapshot = false;
 let _speichernSyncTimer = null;
 
-if (authBar) {
-    authBar.hidden = true;
-    authBar.classList.add("is-hidden");
-}
+if (authBar) authBar.hidden = true;
 
 
 /* ======================
@@ -256,10 +253,6 @@ function getStoredSyncCode() {
     return created;
 }
 
-async function isSyncCodeOccupied(code) {
-    if (!isValidSyncCode(code)) return false;
-    return false;
-}
 
 async function useSyncCodeRpc(code, options = {}) {
     if (!supabaseClient) throw new Error("SUPABASE_CLIENT_MISSING");
@@ -353,10 +346,7 @@ async function applySyncCode(code, shouldReload = true, options = {}) {
 function setSyncEditMode(enabled) {
     syncEditMode = Boolean(enabled);
     const showAuthBar = syncEditMode && modus === "erfassen";
-    if (authBar) {
-        authBar.hidden = !showAuthBar;
-        authBar.classList.toggle("is-hidden", !showAuthBar);
-    }
+    if (authBar) authBar.hidden = !showAuthBar;
     if (syncCodeCompact) syncCodeCompact.hidden = modus !== "erfassen";
     if (syncCodeInput && syncEditMode && modus === "erfassen") {
         syncCodeInput.focus();
@@ -389,21 +379,44 @@ function setupSyncCodeUi() {
     if (syncCodeInput) {
         syncCodeInput.addEventListener("input", () => {
             const normalized = normalizeSyncCode(syncCodeInput.value);
-            if (syncCodeInput.value !== normalized) syncCodeInput.value = normalized;
+            if (syncCodeInput.value !== normalized) {
+                const cursorPos = syncCodeInput.selectionStart ?? normalized.length;
+                const delta = normalized.length - syncCodeInput.value.length;
+                syncCodeInput.value = normalized;
+                const newPos = Math.max(0, Math.min(cursorPos + delta, normalized.length));
+                syncCodeInput.setSelectionRange(newPos, newPos);
+            }
         });
     }
 
+    function setSyncButtonsDisabled(disabled) {
+        if (btnSyncApply) btnSyncApply.disabled = disabled;
+        if (btnSyncNew) btnSyncNew.disabled = disabled;
+    }
+
     if (btnSyncApply) {
-        btnSyncApply.onclick = () =>
-            void applySyncCode(syncCodeInput?.value || "", true, { allowOccupied: true, userInitiated: true });
+        btnSyncApply.onclick = async () => {
+            setSyncButtonsDisabled(true);
+            setAuthStatus("Verbinde...");
+            try {
+                await applySyncCode(syncCodeInput?.value || "", true, { allowOccupied: true, userInitiated: true });
+            } finally {
+                setSyncButtonsDisabled(false);
+            }
+        };
     }
 
     if (btnSyncNew) {
-        btnSyncNew.onclick = () =>
-            void (async () => {
+        btnSyncNew.onclick = async () => {
+            setSyncButtonsDisabled(true);
+            setAuthStatus("Neuer Code wird erstellt...");
+            try {
                 const newCode = await generateAvailableSyncCode();
                 await applySyncCode(newCode, true, { allowOccupied: false, userInitiated: true });
-            })();
+            } finally {
+                setSyncButtonsDisabled(false);
+            }
+        };
     }
 
     if (btnSyncCodeEdit) {
@@ -1861,11 +1874,7 @@ function setModus(neu) {
     if (modeBadge) modeBadge.textContent = modus === "einkaufen" ? "Einkaufen" : "Erfassen";
     document.body.classList.toggle("modus-einkaufen", modus === "einkaufen");
     if (syncCodeCompact) syncCodeCompact.hidden = modus !== "erfassen";
-    if (authBar) {
-        const showAuthBar = modus === "erfassen" && syncEditMode;
-        authBar.hidden = !showAuthBar;
-        authBar.classList.toggle("is-hidden", !showAuthBar);
-    }
+    if (authBar) authBar.hidden = !(modus === "erfassen" && syncEditMode);
 
     if (vorher !== "einkaufen" && neu === "einkaufen") {
         if (sortListByStoreGroups()) speichern();
