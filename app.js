@@ -51,7 +51,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.96";
+const APP_VERSION = "1.0.97";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -262,15 +262,18 @@ async function generateAvailableSyncCode(maxAttempts = 25) {
 
 async function applySyncCode(code, shouldReload = true, options = {}) {
     const allowOccupied = options.allowOccupied !== false;
+    const userInitiated = options.userInitiated === true;
     const normalized = normalizeSyncCode(code);
     if (!isValidSyncCode(normalized)) {
         setAuthStatus("Bitte Code im Format AAAA1234 eingeben.");
+        if (userInitiated) setSyncEditMode(true);
         return;
     }
     if (isReservedSyncCode(normalized)) {
         openHelpViewer();
         setAuthStatus("Code HELP0000 oeffnet die Kurzanleitung.");
         if (syncCodeInput) syncCodeInput.value = currentSyncCode || "";
+        if (userInitiated) setSyncEditMode(true);
         return;
     }
 
@@ -287,7 +290,8 @@ async function applySyncCode(code, shouldReload = true, options = {}) {
         } else {
             setAuthStatus(hint);
         }
-        if (syncCodeInput) {
+        if (userInitiated && syncCodeInput) {
+            setSyncEditMode(true);
             syncCodeInput.value = currentSyncCode || normalized || "";
             syncCodeInput.focus();
             syncCodeInput.select();
@@ -301,7 +305,7 @@ async function applySyncCode(code, shouldReload = true, options = {}) {
     if (btnSyncCodeDisplay) btnSyncCodeDisplay.textContent = currentSyncCode;
     setAuthStatus(`Geraete-Code: ${currentSyncCode}`);
     setInputErrorStatus("");
-    setSyncEditMode(false);
+    if (userInitiated) setSyncEditMode(false);
     if (syncCodeInput) syncCodeInput.blur();
     if (supabaseClient) startRealtimeSync();
     updateSyncDebug();
@@ -320,6 +324,10 @@ function setSyncEditMode(enabled) {
         syncCodeInput.focus();
         syncCodeInput.select();
     }
+}
+
+function openSyncEditorFromUser() {
+    setSyncEditMode(true);
 }
 
 function setupSyncCodeUi() {
@@ -348,14 +356,15 @@ function setupSyncCodeUi() {
     }
 
     if (btnSyncApply) {
-        btnSyncApply.onclick = () => void applySyncCode(syncCodeInput?.value || "", true, { allowOccupied: true });
+        btnSyncApply.onclick = () =>
+            void applySyncCode(syncCodeInput?.value || "", true, { allowOccupied: true, userInitiated: true });
     }
 
     if (btnSyncNew) {
         btnSyncNew.onclick = () =>
             void (async () => {
                 const newCode = await generateAvailableSyncCode();
-                await applySyncCode(newCode, true, { allowOccupied: false });
+                await applySyncCode(newCode, true, { allowOccupied: false, userInitiated: true });
             })();
     }
 
@@ -364,7 +373,7 @@ function setupSyncCodeUi() {
     }
 
     if (btnSyncCodeDisplay) {
-        btnSyncCodeDisplay.onclick = () => setSyncEditMode(true);
+        btnSyncCodeDisplay.onclick = () => openSyncEditorFromUser();
     }
 }
 
