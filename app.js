@@ -51,7 +51,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.102";
+const APP_VERSION = "1.0.103";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -790,9 +790,11 @@ async function activateWaitingServiceWorker(registration) {
 }
 
 async function forceAppUpdate() {
-    if (hasPendingUpdateRisk()) {
-        setSyncStatus("Update blockiert: erst speichern/syncen", "warn");
-        setAuthStatus("Bitte erst 'Uebernehmen' druecken und auf 'Sync: Verbunden' warten.");
+    // Nur bei aktiver Benutzereingabe blockieren – Hintergrund-Sync ist nach Reload sicher
+    const activeInput = isListening || (multiInput && multiInput.value.trim().length > 0);
+    if (activeInput) {
+        setSyncStatus("Update blockiert: Eingabe beenden", "warn");
+        setAuthStatus("Bitte Mikrofon stoppen und Eingabe mit 'Übernehmen' speichern.");
         return;
     }
 
