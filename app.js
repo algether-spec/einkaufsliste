@@ -51,7 +51,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.95";
+const APP_VERSION = "1.0.96";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -175,6 +175,10 @@ function setAuthStatus(text) {
 function setInputErrorStatus(text) {
     if (!inputErrorStatus) return;
     inputErrorStatus.textContent = String(text || "").trim();
+}
+
+function isNetworkUnavailable() {
+    return typeof navigator !== "undefined" && navigator.onLine === false;
 }
 
 function normalizeSyncCode(input) {
@@ -631,6 +635,9 @@ function getSyncErrorHint(err) {
     const raw = formatSupabaseError(err);
     const message = raw.toLowerCase();
     if (!message) return "Bitte Verbindung und Supabase-Einstellungen pruefen.";
+    if (message.includes("json parse error") && message.includes("unrecognized token '<'")) {
+        return "Cloud-Sync derzeit nicht erreichbar (Netz/CDN). Lokal wird weiter gespeichert.";
+    }
     if (message.includes("column shopping_items.deleted_at does not exist")) {
         return "DB-Migration fehlt: Bitte supabase/schema.sql im Supabase SQL Editor ausfuehren.";
     }
@@ -870,6 +877,11 @@ function startRealtimeSync() {
 }
 
 async function ensureSupabaseAuth() {
+    if (isNetworkUnavailable()) {
+        setInputErrorStatus("");
+        setSyncStatus("Sync: Offline (lokal)", "offline");
+        return false;
+    }
     if (!supabaseClient) {
         setInputErrorStatus("Supabase Client nicht initialisiert. config.js / Internet pruefen.");
         setSyncStatus("Sync: Offline (lokal)", "offline");
@@ -1074,6 +1086,11 @@ async function fetchRemoteChangesSince(lastRemoteSyncAt) {
 async function syncRemoteIfNeeded(forceOverwrite = false) {
     void forceOverwrite; // Snapshot-Overwrite wird durch operationbasierten Sync ersetzt.
     if (!supabaseClient) return;
+    if (isNetworkUnavailable()) {
+        setInputErrorStatus("");
+        setSyncStatus("Sync: Offline (lokal)", "offline");
+        return;
+    }
     if (remoteSyncInFlight) {
         remoteSyncQueued = true;
         return;
@@ -1108,7 +1125,10 @@ async function syncRemoteIfNeeded(forceOverwrite = false) {
     } catch (err) {
         console.warn("Remote-Sync fehlgeschlagen, lokal bleibt aktiv:", err, formatSupabaseError(err));
         setSyncStatus("Sync: Offline (lokal)", "offline");
-        setInputErrorStatus(getSyncErrorHint(err));
+        const hint = getSyncErrorHint(err);
+        const isNetworkHint = hint.toLowerCase().includes("cloud-sync derzeit nicht erreichbar")
+            || hint.toLowerCase().includes("netzwerkfehler");
+        setInputErrorStatus(isNetworkHint ? "" : hint);
         updateSyncDebug();
     } finally {
         remoteSyncInFlight = false;
@@ -1117,6 +1137,11 @@ async function syncRemoteIfNeeded(forceOverwrite = false) {
 
 async function refreshFromRemoteIfChanged() {
     if (!supabaseClient) return;
+    if (isNetworkUnavailable()) {
+        setInputErrorStatus("");
+        setSyncStatus("Sync: Offline (lokal)", "offline");
+        return;
+    }
     if (remoteSyncInFlight || remotePullInFlight) return;
 
     remotePullInFlight = true;
@@ -1140,7 +1165,10 @@ async function refreshFromRemoteIfChanged() {
     } catch (err) {
         console.warn("Remote-Refresh fehlgeschlagen:", err, formatSupabaseError(err));
         setSyncStatus("Sync: Offline (lokal)", "offline");
-        setInputErrorStatus(getSyncErrorHint(err));
+        const hint = getSyncErrorHint(err);
+        const isNetworkHint = hint.toLowerCase().includes("cloud-sync derzeit nicht erreichbar")
+            || hint.toLowerCase().includes("netzwerkfehler");
+        setInputErrorStatus(isNetworkHint ? "" : hint);
         updateSyncDebug();
     } finally {
         remotePullInFlight = false;
@@ -1153,13 +1181,17 @@ function startBackgroundSync() {
 
     backgroundSyncTimer = setInterval(() => {
         if (document.hidden) return;
+        if (isNetworkUnavailable()) return;
         void refreshFromRemoteIfChanged();
     }, BACKGROUND_SYNC_INTERVAL_MS);
 
-    window.addEventListener("focus", () => void refreshFromRemoteIfChanged());
+    window.addEventListener("focus", () => {
+        if (isNetworkUnavailable()) return;
+        void refreshFromRemoteIfChanged();
+    });
     window.addEventListener("online", () => void refreshFromRemoteIfChanged());
     document.addEventListener("visibilitychange", () => {
-        if (!document.hidden) void refreshFromRemoteIfChanged();
+        if (!document.hidden && !isNetworkUnavailable()) void refreshFromRemoteIfChanged();
     });
 }
 
