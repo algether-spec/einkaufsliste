@@ -51,7 +51,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.101";
+const APP_VERSION = "1.0.102";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -1804,10 +1804,11 @@ function initRecognition() {
         const spokenText = finalTranscript.trim() || latestTranscript.trim();
 
         if (spokenText) {
-            if (multiInput.value.trim()) {
-                multiInput.value = `${multiInput.value.trim()}\n${spokenText}`;
-            } else {
-                multiInput.value = spokenText;
+            const currentValue = multiInput.value.trim();
+            // Nur anhängen wenn das Feld noch nicht denselben Text enthält
+            // (setInputWithDictation befüllt es bereits während onresult)
+            if (currentValue !== spokenText) {
+                multiInput.value = currentValue ? `${currentValue}\n${spokenText}` : spokenText;
             }
             autoResize();
             multiInput.focus();
