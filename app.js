@@ -631,6 +631,12 @@ function getSyncErrorHint(err) {
     const raw = formatSupabaseError(err);
     const message = raw.toLowerCase();
     if (!message) return "Bitte Verbindung und Supabase-Einstellungen pruefen.";
+    if (message.includes("column shopping_items.deleted_at does not exist")) {
+        return "DB-Migration fehlt: Bitte supabase/schema.sql im Supabase SQL Editor ausfuehren.";
+    }
+    if (message.includes("function public.apply_shopping_ops") && message.includes("does not exist")) {
+        return "DB-Migration fehlt: RPC apply_shopping_ops wurde noch nicht angelegt.";
+    }
     if (message.includes("permission denied") || message.includes("not allowed")) {
         return "Supabase Rechte fehlen (schema.sql erneut ausfuehren).";
     }
