@@ -52,7 +52,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.105";
+const APP_VERSION = "1.0.106";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -837,6 +837,16 @@ async function forceAppUpdate() {
     setSyncStatus("Update: wird angewendet...", "warn");
 
     try {
+        // Caches immer zuerst leeren – damit nach Reload keine alten Dateien geliefert werden
+        if ("caches" in window) {
+            const keys = await caches.keys();
+            await Promise.all(
+                keys
+                    .filter(key => key.startsWith("einkaufsliste-"))
+                    .map(key => caches.delete(key))
+            );
+        }
+
         if ("serviceWorker" in navigator) {
             const registrations = await navigator.serviceWorker.getRegistrations();
 
@@ -852,21 +862,8 @@ async function forceAppUpdate() {
                     return;
                 }
             }
-        }
 
-        setSyncStatus("Update: komplette Neuinstallation...", "warn");
-        if ("caches" in window) {
-            const keys = await caches.keys();
-            await Promise.all(
-                keys
-                    .filter(key => key.startsWith("einkaufsliste-"))
-                    .map(key => caches.delete(key))
-            );
-        }
-
-        if ("serviceWorker" in navigator) {
-            const registrations = await navigator.serviceWorker.getRegistrations();
-            await Promise.all(registrations.map(registration => registration.unregister()));
+            await Promise.all(registrations.map(r => r.unregister()));
         }
 
         // Kleine Pause, damit SW-Abmeldung und Cache-Loeschung sicher wirksam sind.
