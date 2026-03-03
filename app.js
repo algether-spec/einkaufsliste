@@ -368,6 +368,25 @@ function setupSyncCodeUi() {
     }
 }
 
+async function autoReconnectAndSync() {
+    if (!supabaseClient) return;
+    if (isNetworkUnavailable()) return;
+    if (syncEditMode) return;
+
+    const candidate = normalizeSyncCode(currentSyncCode || localStorage.getItem(SYNC_CODE_KEY) || "");
+    if (!isValidSyncCode(candidate) || isReservedSyncCode(candidate)) return;
+
+    if (currentSyncCode !== candidate) {
+        setAuthStatus("Online erkannt. Verbinde mit gespeichertem Code...");
+        await applySyncCode(candidate, false, { allowOccupied: true });
+    }
+
+    if (currentSyncCode === candidate) {
+        setAuthStatus("Online erkannt. Synchronisiere...");
+        await syncRemoteIfNeeded();
+    }
+}
+
 function normalizeListData(daten) {
     if (!Array.isArray(daten)) return [];
     const seenItemIds = new Set();
@@ -1189,7 +1208,10 @@ function startBackgroundSync() {
         if (isNetworkUnavailable()) return;
         void refreshFromRemoteIfChanged();
     });
-    window.addEventListener("online", () => void refreshFromRemoteIfChanged());
+    window.addEventListener("online", () => {
+        void autoReconnectAndSync();
+        void refreshFromRemoteIfChanged();
+    });
     document.addEventListener("visibilitychange", () => {
         if (!document.hidden && !isNetworkUnavailable()) void refreshFromRemoteIfChanged();
     });
