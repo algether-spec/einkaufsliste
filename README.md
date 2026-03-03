@@ -38,6 +38,7 @@ Enthaelt:
 Setup siehe:
 - `supabase/SETUP.md`
 - `supabase/schema.sql`
+- `supabase/SYNC_STRATEGIE.md`
 - `config.example.js`
 
 Hinweis:

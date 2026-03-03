@@ -6,6 +6,7 @@
   "scripts": {
     "check:syntax": "node --check app.js && node --check service-worker.js",
     "check:smoke": "node scripts/smoke.mjs",
-    "check": "npm run check:syntax && npm run check:smoke"
+    "check:sync": "node --test scripts/sync-conflict.test.mjs",
+    "check": "npm run check:syntax && npm run check:smoke && npm run check:sync"
   }
 }

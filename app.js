@@ -59,7 +59,10 @@ const STORAGE_KEY = "einkaufsliste";
 const SUPABASE_TABLE = "shopping_items";
 const SUPABASE_CODES_TABLE = "sync_codes";
 const SYNC_CODE_KEY = "einkaufsliste-sync-code";
-const SYNC_BASELINE_PREFIX = "einkaufsliste-sync-baseline:";
+const SYNC_META_PREFIX = "einkaufsliste-sync-meta:";
+const DEVICE_ID_KEY = "einkaufsliste-device-id";
+const SYNC_OP_BATCH_SIZE = 200;
+const TOMBSTONE_TEXT = "[deleted]";
 const IMAGE_ENTRY_PREFIX = "__IMG__:";
 const IMAGE_ENTRY_CAPTION_MARKER = "\n__CAPTION__:";
 
@@ -145,6 +148,7 @@ let remoteRealtimeChannel = null;
 let remoteRealtimeTimer = null;
 let autoUpdateCheckTimer = null;
 let autoUpdateInProgress = false;
+let applyingRemoteSnapshot = false;
 
 if (authBar) {
     authBar.hidden = true;
@@ -391,32 +395,135 @@ function listDataSignature(daten) {
     );
 }
 
-function getSyncBaselineStorageKey() {
-    if (!currentSyncCode) return "";
-    return SYNC_BASELINE_PREFIX + currentSyncCode;
+function getDeviceId() {
+    const existing = String(localStorage.getItem(DEVICE_ID_KEY) || "").trim();
+    if (existing) return existing;
+    const created = window.crypto?.randomUUID
+        ? window.crypto.randomUUID()
+        : `device-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    localStorage.setItem(DEVICE_ID_KEY, created);
+    return created;
 }
 
-function loadSyncedItemIdSet() {
-    const key = getSyncBaselineStorageKey();
-    if (!key) return new Set();
+function getSyncMetaStorageKey() {
+    if (!currentSyncCode) return "";
+    return SYNC_META_PREFIX + currentSyncCode;
+}
 
+function createEmptySyncMeta() {
+    return {
+        opSeq: 0,
+        pendingOps: [],
+        snapshot: [],
+        lastRemoteSyncAt: ""
+    };
+}
+
+function normalizeSnapshotData(daten) {
+    return normalizeListData(daten).map((entry, index) => ({
+        itemId: entry.itemId,
+        text: entry.text,
+        erledigt: entry.erledigt,
+        position: Number.isFinite(entry.position) ? entry.position : index
+    }));
+}
+
+function loadSyncMeta() {
+    const key = getSyncMetaStorageKey();
+    if (!key) return createEmptySyncMeta();
     const raw = localStorage.getItem(key);
-    if (!raw) return new Set();
-
+    if (!raw) return createEmptySyncMeta();
     try {
         const parsed = JSON.parse(raw);
-        if (!Array.isArray(parsed)) return new Set();
-        return new Set(parsed.map(id => String(id || "").trim()).filter(Boolean));
+        const meta = createEmptySyncMeta();
+        meta.opSeq = Number.isFinite(parsed?.opSeq) ? parsed.opSeq : 0;
+        meta.pendingOps = Array.isArray(parsed?.pendingOps) ? parsed.pendingOps : [];
+        meta.snapshot = normalizeSnapshotData(parsed?.snapshot || []);
+        meta.lastRemoteSyncAt = String(parsed?.lastRemoteSyncAt || "");
+        return meta;
     } catch {
-        return new Set();
+        return createEmptySyncMeta();
     }
 }
 
-function saveSyncedItemIdSet(daten) {
-    const key = getSyncBaselineStorageKey();
+function saveSyncMeta(meta) {
+    const key = getSyncMetaStorageKey();
     if (!key) return;
-    const ids = normalizeListData(daten).map(item => item.itemId);
-    localStorage.setItem(key, JSON.stringify(ids));
+    localStorage.setItem(key, JSON.stringify({
+        opSeq: Number.isFinite(meta?.opSeq) ? meta.opSeq : 0,
+        pendingOps: Array.isArray(meta?.pendingOps) ? meta.pendingOps : [],
+        snapshot: normalizeSnapshotData(meta?.snapshot || []),
+        lastRemoteSyncAt: String(meta?.lastRemoteSyncAt || "")
+    }));
+}
+
+function nextOpId(meta) {
+    const seq = Number.isFinite(meta.opSeq) ? meta.opSeq + 1 : 1;
+    meta.opSeq = seq;
+    return `${getDeviceId()}-${seq}`;
+}
+
+function queueChangeOps(currentData) {
+    if (applyingRemoteSnapshot) return false;
+    const meta = loadSyncMeta();
+    const previous = normalizeSnapshotData(meta.snapshot);
+    const current = normalizeSnapshotData(currentData);
+    const previousById = new Map(previous.map(item => [item.itemId, item]));
+    const currentById = new Map(current.map(item => [item.itemId, item]));
+    let queued = false;
+
+    for (const item of current) {
+        const prev = previousById.get(item.itemId);
+        const changed = !prev
+            || prev.text !== item.text
+            || prev.erledigt !== item.erledigt
+            || prev.position !== item.position;
+        if (!changed) continue;
+        meta.pendingOps.push({
+            opId: nextOpId(meta),
+            opType: "upsert",
+            itemId: item.itemId,
+            text: item.text,
+            erledigt: item.erledigt,
+            position: item.position,
+            clientUpdatedAt: new Date().toISOString()
+        });
+        queued = true;
+    }
+
+    for (const prev of previous) {
+        if (currentById.has(prev.itemId)) continue;
+        meta.pendingOps.push({
+            opId: nextOpId(meta),
+            opType: "delete",
+            itemId: prev.itemId,
+            text: prev.text || TOMBSTONE_TEXT,
+            erledigt: false,
+            position: prev.position,
+            clientUpdatedAt: new Date().toISOString()
+        });
+        queued = true;
+    }
+
+    meta.snapshot = current;
+    saveSyncMeta(meta);
+    return queued;
+}
+
+function writeSnapshotToUi(snapshotData) {
+    const normalized = normalizeSnapshotData(snapshotData)
+        .sort((a, b) => a.position - b.position)
+        .map((entry, index) => ({ ...entry, position: index }));
+    applyingRemoteSnapshot = true;
+    try {
+        datenInListeSchreiben(normalized);
+        applyModeSortAfterLoad();
+        const uiData = normalizeListData(datenAusListeLesen());
+        speichernLokal(uiData);
+        return uiData;
+    } finally {
+        applyingRemoteSnapshot = false;
+    }
 }
 
 function generateItemId() {
@@ -500,47 +607,6 @@ function sortListByStoreGroups() {
     datenInListeSchreiben(sortierte);
     speichernLokal(sortierte);
     return true;
-}
-
-function mergeListConflict(localDaten, remoteDaten, syncedItemIdSet = new Set()) {
-    const local = normalizeListData(localDaten);
-    const remote = normalizeListData(remoteDaten);
-    const localById = new Map(local.map(item => [item.itemId, item]));
-    const merged = remote.map((remoteItem, index) => {
-        const localItem = localById.get(remoteItem.itemId);
-        if (localItem) {
-            return {
-                itemId: localItem.itemId,
-                text: localItem.text,
-                erledigt: localItem.erledigt,
-                position: index
-            };
-        }
-        return {
-            itemId: remoteItem.itemId,
-            text: remoteItem.text,
-            erledigt: remoteItem.erledigt,
-            position: index
-        };
-    });
-
-    for (const item of local) {
-        const existsRemotely = remote.some(remoteItem => remoteItem.itemId === item.itemId);
-        if (existsRemotely) continue;
-
-        // Wenn ein Item frueher bereits synchron war und nun remote fehlt,
-        // behandeln wir das als Remote-Loeschung und holen es nicht zurueck.
-        if (syncedItemIdSet.has(item.itemId)) continue;
-
-        merged.push({
-            itemId: item.itemId,
-            text: item.text,
-            erledigt: item.erledigt,
-            position: merged.length
-        });
-    }
-
-    return merged.map((item, index) => ({ ...item, position: index }));
 }
 
 function shortUserId(id) {
@@ -906,9 +972,10 @@ async function ladenRemote() {
 
     const { data, error } = await supabaseClient
         .from(SUPABASE_TABLE)
-        .select("item_id, text, erledigt, position")
+        .select("item_id, text, erledigt, position, deleted_at, updated_at")
         .eq("sync_code", currentSyncCode)
-        .order("position", { ascending: true });
+        .order("position", { ascending: true })
+        .order("updated_at", { ascending: true });
 
     if (error) throw error;
     if (!Array.isArray(data)) return [];
@@ -917,65 +984,92 @@ async function ladenRemote() {
         itemId: String(e.item_id || "").trim() || generateItemId(),
         text: String(e.text || ""),
         erledigt: Boolean(e.erledigt),
-        position: Number.isFinite(e.position) ? e.position : index
+        position: Number.isFinite(e.position) ? e.position : index,
+        deletedAt: e.deleted_at ? String(e.deleted_at) : "",
+        updatedAt: e.updated_at ? String(e.updated_at) : ""
     }));
 }
 
-async function speichernRemote(daten, options = {}) {
-    const allowRemoteDeletes = options.allowRemoteDeletes === true;
-    if (!supabaseClient) return;
-    if (!(await ensureSupabaseAuth())) return;
+async function uploadPendingOps() {
+    const meta = loadSyncMeta();
+    if (!Array.isArray(meta.pendingOps) || meta.pendingOps.length === 0) return false;
+    if (!supabaseClient) return false;
+    if (!(await ensureSupabaseAuth())) return false;
 
-    if (!daten.length) {
-        const { error: deleteAllError } = await supabaseClient
-            .from(SUPABASE_TABLE)
-            .delete()
-            .eq("sync_code", currentSyncCode);
+    const batch = meta.pendingOps.slice(0, SYNC_OP_BATCH_SIZE);
+    const { error } = await supabaseClient.rpc("apply_shopping_ops", {
+        p_sync_code: currentSyncCode,
+        p_device_id: getDeviceId(),
+        p_ops: batch
+    });
+    if (error) throw error;
 
-        if (deleteAllError) throw deleteAllError;
-        return;
+    meta.pendingOps = meta.pendingOps.slice(batch.length);
+    saveSyncMeta(meta);
+    return batch.length > 0;
+}
+
+function applyRemoteRowsToSnapshot(snapshotData, remoteRows) {
+    const snapshotMap = new Map(normalizeSnapshotData(snapshotData).map(item => [item.itemId, item]));
+    let latestUpdatedAt = "";
+
+    for (const row of remoteRows) {
+        const itemId = String(row.itemId || "").trim();
+        if (!itemId) continue;
+        const rowUpdatedAt = String(row.updatedAt || "");
+        if (rowUpdatedAt && (!latestUpdatedAt || rowUpdatedAt > latestUpdatedAt)) {
+            latestUpdatedAt = rowUpdatedAt;
+        }
+        if (row.deletedAt) {
+            snapshotMap.delete(itemId);
+            continue;
+        }
+        snapshotMap.set(itemId, {
+            itemId,
+            text: String(row.text || ""),
+            erledigt: Boolean(row.erledigt),
+            position: Number.isFinite(row.position) ? row.position : snapshotMap.size
+        });
     }
 
-    const payload = daten.map((e, index) => ({
-        sync_code: currentSyncCode,
-        item_id: String(e.itemId || "").trim() || generateItemId(),
-        text: e.text,
-        erledigt: e.erledigt,
-        position: index
+    return {
+        snapshot: [...snapshotMap.values()].sort((a, b) => a.position - b.position),
+        latestUpdatedAt
+    };
+}
+
+async function fetchRemoteChangesSince(lastRemoteSyncAt) {
+    if (!supabaseClient) return [];
+    if (!(await ensureSupabaseAuth())) return [];
+
+    let query = supabaseClient
+        .from(SUPABASE_TABLE)
+        .select("item_id, text, erledigt, position, deleted_at, updated_at")
+        .eq("sync_code", currentSyncCode)
+        .order("updated_at", { ascending: true });
+
+    if (lastRemoteSyncAt) {
+        query = query.gt("updated_at", lastRemoteSyncAt);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    if (!Array.isArray(data)) return [];
+    return data.map((row, index) => ({
+        itemId: String(row.item_id || "").trim() || generateItemId(),
+        text: String(row.text || ""),
+        erledigt: Boolean(row.erledigt),
+        position: Number.isFinite(row.position) ? row.position : index,
+        deletedAt: row.deleted_at ? String(row.deleted_at) : "",
+        updatedAt: row.updated_at ? String(row.updated_at) : ""
     }));
-
-    const { error: upsertError } = await supabaseClient
-        .from(SUPABASE_TABLE)
-        .upsert(payload, { onConflict: "sync_code,item_id" });
-
-    if (upsertError) throw upsertError;
-
-    const localItemIdSet = new Set(payload.map(item => item.item_id));
-    const { data: remoteRows, error: remoteRowsError } = await supabaseClient
-        .from(SUPABASE_TABLE)
-        .select("item_id")
-        .eq("sync_code", currentSyncCode);
-
-    if (remoteRowsError) throw remoteRowsError;
-    const remoteItemIds = (remoteRows || []).map(row => String(row.item_id || "").trim()).filter(Boolean);
-    const obsoleteItemIds = remoteItemIds.filter(itemId => !localItemIdSet.has(itemId));
-
-    if (allowRemoteDeletes && obsoleteItemIds.length > 0) {
-        const { error: deleteObsoleteError } = await supabaseClient
-            .from(SUPABASE_TABLE)
-            .delete()
-            .eq("sync_code", currentSyncCode)
-            .in("item_id", obsoleteItemIds);
-
-        if (deleteObsoleteError) throw deleteObsoleteError;
-    }
 }
 
 async function syncRemoteIfNeeded(forceOverwrite = false) {
+    void forceOverwrite; // Snapshot-Overwrite wird durch operationbasierten Sync ersetzt.
     if (!supabaseClient) return;
     if (remoteSyncInFlight) {
         remoteSyncQueued = true;
-        remoteSyncForceOverwrite = remoteSyncForceOverwrite || forceOverwrite;
         return;
     }
 
@@ -983,35 +1077,25 @@ async function syncRemoteIfNeeded(forceOverwrite = false) {
     try {
         setSyncStatus("Sync: Synchronisiere...", "warn");
         do {
-            const overwriteThisRun = forceOverwrite || remoteSyncForceOverwrite;
-            forceOverwrite = false;
-            remoteSyncForceOverwrite = false;
             remoteSyncQueued = false;
-            const lokaleDaten = normalizeListData(datenAusListeLesen());
-            let datenZumSpeichern = lokaleDaten;
-
-            if (!overwriteThisRun) {
-                const remoteVorher = await ladenRemote();
-                if (Array.isArray(remoteVorher)) {
-                    const remoteDaten = normalizeListData(remoteVorher);
-                    if (listDataSignature(lokaleDaten) !== listDataSignature(remoteDaten)) {
-                        const syncedItemIdSet = loadSyncedItemIdSet();
-                        datenZumSpeichern = mergeListConflict(lokaleDaten, remoteDaten, syncedItemIdSet);
-                        if (listDataSignature(datenZumSpeichern) !== listDataSignature(lokaleDaten)) {
-                            datenInListeSchreiben(datenZumSpeichern);
-                            applyModeSortAfterLoad();
-                            speichernLokal(datenAusListeLesen());
-                            setAuthStatus("Konflikt erkannt: Listen wurden zusammengefuehrt.");
-                        }
-                    }
-                }
+            while (await uploadPendingOps()) {
+                // In Batches leeren, damit große Offline-Queues idempotent abgearbeitet werden.
             }
 
-            await speichernRemote(datenZumSpeichern, { allowRemoteDeletes: overwriteThisRun });
-            saveSyncedItemIdSet(datenZumSpeichern);
+            const meta = loadSyncMeta();
+            const remoteChanges = await fetchRemoteChangesSince(meta.lastRemoteSyncAt);
+            if (remoteChanges.length > 0) {
+                const applied = applyRemoteRowsToSnapshot(meta.snapshot, remoteChanges);
+                meta.snapshot = applied.snapshot;
+                if (applied.latestUpdatedAt) meta.lastRemoteSyncAt = applied.latestUpdatedAt;
+                saveSyncMeta(meta);
+                writeSnapshotToUi(meta.snapshot);
+                setAuthStatus("Liste synchronisiert.");
+            }
         } while (remoteSyncQueued);
+
         lastSyncAt = formatTimeIso(new Date());
-        localDirty = false;
+        localDirty = loadSyncMeta().pendingOps.length > 0;
         setInputErrorStatus("");
         setSyncStatus("Sync: Verbunden", "ok");
         updateSyncDebug();
@@ -1031,21 +1115,15 @@ async function refreshFromRemoteIfChanged() {
 
     remotePullInFlight = true;
     try {
-        const remoteDaten = await ladenRemote();
-        if (!Array.isArray(remoteDaten)) return;
-
-        const normalizedRemote = normalizeListData(remoteDaten);
-        const lokaleDaten = normalizeListData(datenAusListeLesen());
-
-        if (localDirty && listDataSignature(normalizedRemote) !== listDataSignature(lokaleDaten)) {
-            return;
-        }
-
-        if (listDataSignature(normalizedRemote) !== listDataSignature(lokaleDaten)) {
-            datenInListeSchreiben(normalizedRemote);
-            applyModeSortAfterLoad();
-            speichernLokal(datenAusListeLesen());
-            saveSyncedItemIdSet(normalizedRemote);
+        const meta = loadSyncMeta();
+        if (meta.pendingOps.length > 0) return;
+        const remoteChanges = await fetchRemoteChangesSince(meta.lastRemoteSyncAt);
+        if (remoteChanges.length > 0) {
+            const applied = applyRemoteRowsToSnapshot(meta.snapshot, remoteChanges);
+            meta.snapshot = applied.snapshot;
+            if (applied.latestUpdatedAt) meta.lastRemoteSyncAt = applied.latestUpdatedAt;
+            saveSyncMeta(meta);
+            writeSnapshotToUi(meta.snapshot);
             setAuthStatus("Liste von anderem Geraet aktualisiert.");
         }
 
@@ -1080,10 +1158,12 @@ function startBackgroundSync() {
 }
 
 function speichern(forceOverwrite = false) {
+    void forceOverwrite;
     const daten = datenAusListeLesen();
     speichernLokal(daten);
-    localDirty = true;
-    void syncRemoteIfNeeded(forceOverwrite);
+    const queued = queueChangeOps(daten);
+    localDirty = queued || loadSyncMeta().pendingOps.length > 0;
+    void syncRemoteIfNeeded();
 }
 
 async function laden() {
@@ -1092,41 +1172,44 @@ async function laden() {
     if (!supabaseClient) {
         setSyncStatus("Sync: Lokal", "offline");
         updateSyncDebug();
-        datenInListeSchreiben(lokaleDaten);
-        applyModeSortAfterLoad();
+        writeSnapshotToUi(lokaleDaten);
         return;
     }
 
     try {
-        const remoteDaten = await ladenRemote();
-        if (remoteDaten && remoteDaten.length > 0) {
-            datenInListeSchreiben(remoteDaten);
-            applyModeSortAfterLoad();
-            speichernLokal(datenAusListeLesen());
-            saveSyncedItemIdSet(remoteDaten);
-            localDirty = false;
-            setSyncStatus("Sync: Verbunden", "ok");
-            lastSyncAt = formatTimeIso(new Date());
-            updateSyncDebug();
-            return;
+        const meta = loadSyncMeta();
+        if (!meta.snapshot.length && lokaleDaten.length > 0) {
+            const localSnapshot = normalizeSnapshotData(lokaleDaten);
+            meta.snapshot = localSnapshot;
+            if (meta.pendingOps.length === 0) {
+                for (const item of localSnapshot) {
+                    meta.pendingOps.push({
+                        opId: nextOpId(meta),
+                        opType: "upsert",
+                        itemId: item.itemId,
+                        text: item.text,
+                        erledigt: item.erledigt,
+                        position: item.position,
+                        clientUpdatedAt: new Date().toISOString()
+                    });
+                }
+            }
+            saveSyncMeta(meta);
         }
 
-        datenInListeSchreiben(lokaleDaten);
-        applyModeSortAfterLoad();
-        if (lokaleDaten.length > 0) void syncRemoteIfNeeded();
-        else {
-            localDirty = false;
-            setSyncStatus("Sync: Verbunden", "ok");
-            updateSyncDebug();
-        }
+        writeSnapshotToUi(meta.snapshot.length ? meta.snapshot : lokaleDaten);
+        await syncRemoteIfNeeded();
+        localDirty = loadSyncMeta().pendingOps.length > 0;
+        setSyncStatus("Sync: Verbunden", "ok");
+        lastSyncAt = formatTimeIso(new Date());
+        updateSyncDebug();
     } catch (err) {
         console.warn("Remote-Laden fehlgeschlagen, nutze lokale Daten:", err, formatSupabaseError(err));
         setSyncStatus("Sync: Offline (lokal)", "offline");
         setInputErrorStatus(getSyncErrorHint(err));
         updateSyncDebug();
-        datenInListeSchreiben(lokaleDaten);
-        applyModeSortAfterLoad();
-        localDirty = true;
+        writeSnapshotToUi(lokaleDaten);
+        localDirty = loadSyncMeta().pendingOps.length > 0;
     }
 }
 

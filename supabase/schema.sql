@@ -294,3 +294,216 @@ using (
   auth.uid() is not null
   and public.has_sync_membership(shopping_items.sync_code, auth.uid())
 );
+
+-- =============================
+-- Offline-First Sync (Soft Delete + idempotente Ops)
+-- =============================
+
+alter table public.shopping_items
+  add column if not exists deleted_at timestamptz;
+
+alter table public.shopping_items
+  add column if not exists client_updated_at timestamptz;
+
+alter table public.shopping_items
+  add column if not exists updated_by_device text;
+
+create index if not exists shopping_items_sync_code_updated_at_idx
+  on public.shopping_items (sync_code, updated_at desc);
+
+create index if not exists shopping_items_sync_code_deleted_at_idx
+  on public.shopping_items (sync_code, deleted_at)
+  where deleted_at is not null;
+
+create table if not exists public.shopping_item_applied_ops (
+  sync_code text not null,
+  device_id text not null,
+  op_id text not null,
+  item_id text not null,
+  op_type text not null,
+  applied_at timestamptz not null default now(),
+  primary key (sync_code, device_id, op_id)
+);
+
+create index if not exists shopping_item_applied_ops_sync_code_applied_at_idx
+  on public.shopping_item_applied_ops (sync_code, applied_at desc);
+
+alter table public.shopping_item_applied_ops enable row level security;
+revoke all on public.shopping_item_applied_ops from anon, authenticated;
+
+create or replace function public.apply_shopping_ops(
+  p_sync_code text,
+  p_device_id text,
+  p_ops jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_now timestamptz := now();
+  v_ops jsonb := coalesce(p_ops, '[]'::jsonb);
+  v_op jsonb;
+  v_op_id text;
+  v_op_type text;
+  v_item_id text;
+  v_text text;
+  v_erledigt boolean;
+  v_position integer;
+  v_client_updated_at timestamptz;
+  v_existing public.shopping_items%rowtype;
+  v_applied integer := 0;
+  v_skipped integer := 0;
+begin
+  if v_uid is null then
+    raise exception 'AUTH_REQUIRED';
+  end if;
+
+  if coalesce(trim(p_sync_code), '') = '' then
+    raise exception 'SYNC_CODE_REQUIRED';
+  end if;
+
+  if coalesce(trim(p_device_id), '') = '' then
+    raise exception 'DEVICE_ID_REQUIRED';
+  end if;
+
+  if not public.has_sync_membership(p_sync_code, v_uid) then
+    raise exception 'SYNC_CODE_NOT_JOINED';
+  end if;
+
+  for v_op in
+    select value
+    from jsonb_array_elements(v_ops)
+  loop
+    v_op_id := coalesce(trim(v_op->>'opId'), '');
+    v_op_type := lower(coalesce(trim(v_op->>'opType'), ''));
+    v_item_id := coalesce(trim(v_op->>'itemId'), '');
+    v_text := coalesce(v_op->>'text', '[deleted]');
+    v_erledigt := coalesce((v_op->>'erledigt')::boolean, false);
+    v_position := coalesce((v_op->>'position')::integer, 0);
+    v_client_updated_at := nullif(v_op->>'clientUpdatedAt', '')::timestamptz;
+
+    if v_op_id = '' or v_item_id = '' or v_op_type not in ('upsert', 'delete') then
+      v_skipped := v_skipped + 1;
+      continue;
+    end if;
+
+    if exists (
+      select 1
+      from public.shopping_item_applied_ops a
+      where a.sync_code = p_sync_code
+        and a.device_id = p_device_id
+        and a.op_id = v_op_id
+    ) then
+      v_skipped := v_skipped + 1;
+      continue;
+    end if;
+
+    select *
+    into v_existing
+    from public.shopping_items s
+    where s.sync_code = p_sync_code
+      and s.item_id = v_item_id
+    for update;
+
+    if v_op_type = 'delete' then
+      if found then
+        update public.shopping_items
+        set
+          deleted_at = coalesce(deleted_at, v_now),
+          updated_by_device = p_device_id,
+          client_updated_at = coalesce(v_client_updated_at, client_updated_at),
+          position = v_position
+        where sync_code = p_sync_code
+          and item_id = v_item_id;
+      else
+        insert into public.shopping_items (
+          sync_code,
+          item_id,
+          text,
+          erledigt,
+          position,
+          deleted_at,
+          client_updated_at,
+          updated_by_device
+        ) values (
+          p_sync_code,
+          v_item_id,
+          coalesce(nullif(v_text, ''), '[deleted]'),
+          false,
+          v_position,
+          v_now,
+          v_client_updated_at,
+          p_device_id
+        );
+      end if;
+    else
+      if found then
+        -- Delete-wins ohne explizite Restore-Operation:
+        -- Tombstones werden nicht durch alte Offline-Updates reaktiviert.
+        if v_existing.deleted_at is null then
+          update public.shopping_items
+          set
+            text = v_text,
+            erledigt = v_erledigt,
+            position = v_position,
+            client_updated_at = coalesce(v_client_updated_at, client_updated_at),
+            updated_by_device = p_device_id
+          where sync_code = p_sync_code
+            and item_id = v_item_id;
+        else
+          v_skipped := v_skipped + 1;
+        end if;
+      else
+        insert into public.shopping_items (
+          sync_code,
+          item_id,
+          text,
+          erledigt,
+          position,
+          deleted_at,
+          client_updated_at,
+          updated_by_device
+        ) values (
+          p_sync_code,
+          v_item_id,
+          v_text,
+          v_erledigt,
+          v_position,
+          null,
+          v_client_updated_at,
+          p_device_id
+        );
+      end if;
+    end if;
+
+    insert into public.shopping_item_applied_ops (
+      sync_code,
+      device_id,
+      op_id,
+      item_id,
+      op_type,
+      applied_at
+    ) values (
+      p_sync_code,
+      p_device_id,
+      v_op_id,
+      v_item_id,
+      v_op_type,
+      v_now
+    );
+
+    v_applied := v_applied + 1;
+  end loop;
+
+  return jsonb_build_object(
+    'applied', v_applied,
+    'skipped', v_skipped
+  );
+end;
+$$;
+
+revoke all on function public.apply_shopping_ops(text, text, jsonb) from public;
+grant execute on function public.apply_shopping_ops(text, text, jsonb) to authenticated;
