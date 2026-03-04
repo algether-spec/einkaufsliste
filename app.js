@@ -54,7 +54,7 @@ const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 const MODUS_ERFASSEN = "erfassen";
 const MODUS_EINKAUFEN = "einkaufen";
 let modus = MODUS_ERFASSEN;
-const APP_VERSION = "1.0.112";
+const APP_VERSION = "1.0.113";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -1042,21 +1042,31 @@ async function remoteAenderungenLaden(lastRemoteSyncAt) {
     if (!supabaseClient) return [];
     if (!(await authSicherstellen())) return [];
 
-    let query = supabaseClient
-        .from(SUPABASE_TABLE)
-        .select("item_id, text, erledigt, position, deleted_at, updated_at")
-        .eq("sync_code", currentSyncCode)
-        .order("updated_at", { ascending: true })
-        .limit(2000);
+    const PAGE_SIZE = 500;
+    const alle = [];
+    let offset = 0;
 
-    if (lastRemoteSyncAt) {
-        query = query.gt("updated_at", lastRemoteSyncAt);
+    while (true) {
+        let query = supabaseClient
+            .from(SUPABASE_TABLE)
+            .select("item_id, text, erledigt, position, deleted_at, updated_at")
+            .eq("sync_code", currentSyncCode)
+            .order("updated_at", { ascending: true })
+            .range(offset, offset + PAGE_SIZE - 1);
+
+        if (lastRemoteSyncAt) {
+            query = query.gt("updated_at", lastRemoteSyncAt);
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+        if (!Array.isArray(data) || data.length === 0) break;
+        alle.push(...data);
+        if (data.length < PAGE_SIZE) break;
+        offset += PAGE_SIZE;
     }
 
-    const { data, error } = await query;
-    if (error) throw error;
-    if (!Array.isArray(data)) return [];
-    return data.map((row, index) => ({
+    return alle.map((row, index) => ({
         itemId: String(row.item_id || "").trim() || generateItemId(),
         text: String(row.text || ""),
         erledigt: Boolean(row.erledigt),
@@ -1245,6 +1255,7 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId(), _batc
     li.dataset.itemId = String(itemId || "").trim() || generateItemId();
     li.dataset.rawText = rawText;
     li.dataset.text = rawText;
+    if (isPhotoEntryText(rawText)) li.classList.add("foto-eintrag");
 
     if (rawText.startsWith(IMAGE_ENTRY_PREFIX)) {
         const parsedPhoto = parsePhotoEntryText(rawText) || { imageSrc: "", caption: "" };
@@ -1359,9 +1370,8 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId(), _batc
         if (isPhotoEntryText(rawText)) {
             liste.appendChild(li);
         } else {
-            const entries = [...liste.querySelectorAll("li")];
-            const firstText = entries.find(entry => !isPhotoEntryText(entry.dataset.rawText || entry.dataset.text));
-            const firstPhoto = entries.find(entry => isPhotoEntryText(entry.dataset.rawText || entry.dataset.text));
+            const firstText = liste.querySelector("li:not(.foto-eintrag)");
+            const firstPhoto = liste.querySelector("li.foto-eintrag");
             if (firstText) liste.insertBefore(li, firstText);
             else if (firstPhoto) liste.insertBefore(li, firstPhoto);
             else liste.appendChild(li);
