@@ -53,7 +53,7 @@ const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 const MODUS_ERFASSEN = "erfassen";
 const MODUS_EINKAUFEN = "einkaufen";
 let modus = MODUS_ERFASSEN;
-const APP_VERSION = "1.0.117";
+const APP_VERSION = "1.0.118";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -64,7 +64,8 @@ const SYNC_META_PREFIX = "einkaufsliste-sync-meta:";
 const DEVICE_ID_KEY = "einkaufsliste-device-id";
 const SYNC_OP_BATCH_SIZE = 200;
 const MAX_REMOTE_ROWS = 10_000;
-const MAX_TEXT_LENGTH = 10_000;
+const MAX_TEXT_LENGTH = 10_000;       // für normale Einträge
+const MAX_PHOTO_TEXT_LENGTH = 5_000_000; // für Foto-Data-URLs (~3.5 MB Bild)
 const MAX_ITEM_ID_LENGTH = 128;
 const TOMBSTONE_TEXT = "[deleted]";
 // IMAGE_ENTRY_PREFIX, IMAGE_ENTRY_CAPTION_MARKER, parsePhotoEntryText, buildPhotoEntryText → utils.js
@@ -1091,7 +1092,7 @@ async function remoteAenderungenLaden(lastRemoteSyncAt) {
         const position = Number.isFinite(row.position) && row.position >= 0 ? row.position : index;
         return [{
             itemId,
-            text: String(row.text || "").slice(0, MAX_TEXT_LENGTH),
+            text: (() => { const t = String(row.text || ""); return t.slice(0, isPhotoEntryText(t) ? MAX_PHOTO_TEXT_LENGTH : MAX_TEXT_LENGTH); })(),
             erledigt: Boolean(row.erledigt),
             position,
             deletedAt: row.deleted_at ? String(row.deleted_at) : "",
