@@ -22,6 +22,14 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - name: Create config.js from secrets
+        run: |
+          cat > config.js <<'ENDOFFILE'
+          window.APP_CONFIG = {
+            supabaseUrl: "${{ secrets.SUPABASE_URL }}",
+            supabaseAnonKey: "${{ secrets.SUPABASE_ANON_KEY }}"
+          };
+          ENDOFFILE
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
