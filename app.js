@@ -53,7 +53,7 @@ const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 const MODUS_ERFASSEN = "erfassen";
 const MODUS_EINKAUFEN = "einkaufen";
 let modus = MODUS_ERFASSEN;
-const APP_VERSION = "1.0.116";
+const APP_VERSION = "1.0.117";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -1868,32 +1868,35 @@ if (btnMic && !SpeechRecognitionCtor) {
     mikStatusSetzen("Spracherkennung wird in diesem Browser nicht unterstuetzt.");
 }
 
-// Vor syncCodeUiEinrichten lesen: syncCodeLaden() generiert ggf. einen neuen Code und
-// überschreibt localStorage, sodass currentSyncCode danach nicht mehr zuverlässig ist.
+// URL-Code VOR syncCodeUiEinrichten auswerten: syncCodeLaden() würde sonst einen eigenen
+// Code generieren und async dagegen konkurrieren (Race Condition → falscher Code aktiv).
 const _preExistingCode = syncCodeNormalisieren(localStorage.getItem(SYNC_CODE_KEY) || "");
+const _rawUrlCode = new URLSearchParams(location.search).get("code");
+const _normalizedUrlCode = _rawUrlCode ? syncCodeNormalisieren(_rawUrlCode) : "";
+const _hatVorherigenCode = istGueltigerSyncCode(_preExistingCode) && !istReservierterSyncCode(_preExistingCode);
+const _urlCodeGueltig = istGueltigerSyncCode(_normalizedUrlCode);
+const _urlCodeAutoAnwenden = _urlCodeGueltig && (!_hatVorherigenCode || _preExistingCode === _normalizedUrlCode);
 
-syncCodeUiEinrichten();
+if (_urlCodeAutoAnwenden) {
+    // URL-Code vorab in localStorage schreiben → syncCodeUiEinrichten verwendet ihn direkt,
+    // kein zweiter konkurrierender syncCodeAnwenden-Aufruf nötig.
+    localStorage.setItem(SYNC_CODE_KEY, _normalizedUrlCode);
+}
 
-// ?code=XXXX in der URL → verbinden (z.B. aus geteiltem Link)
-const _urlCode = new URLSearchParams(location.search).get("code");
-if (_urlCode) {
+if (_rawUrlCode) {
     const _cleanUrl = new URL(location.href);
     _cleanUrl.searchParams.delete("code");
     _cleanUrl.searchParams.delete("u");
     history.replaceState(null, "", _cleanUrl.toString());
-    const _normalizedUrlCode = syncCodeNormalisieren(_urlCode);
-    if (istGueltigerSyncCode(_normalizedUrlCode)) {
-        const _hatVorherigenCode = istGueltigerSyncCode(_preExistingCode) && !istReservierterSyncCode(_preExistingCode);
-        if (!_hatVorherigenCode || _preExistingCode === _normalizedUrlCode) {
-            // Kein bestehender Code (oder gleicher Code) → direkt verbinden
-            void syncCodeAnwenden(_normalizedUrlCode, true, { allowOccupied: true, userInitiated: true });
-        } else {
-            // Bestehender Code weicht ab → Nutzer muss explizit bestätigen
-            if (syncCodeInput) syncCodeInput.value = _normalizedUrlCode;
-            syncBearbeitungsmodusSetzen(true);
-            authStatusSetzen(`Geteilter Code: ${_normalizedUrlCode} – Verbinden zum Beitreten.`);
-        }
-    }
+}
+
+syncCodeUiEinrichten();
+
+// Bestehender Code weicht vom URL-Code ab → Editor zeigen, Nutzer bestätigt
+if (_urlCodeGueltig && _hatVorherigenCode && _preExistingCode !== _normalizedUrlCode) {
+    if (syncCodeInput) syncCodeInput.value = _normalizedUrlCode;
+    syncBearbeitungsmodusSetzen(true);
+    authStatusSetzen(`Geteilter Code: ${_normalizedUrlCode} – Verbinden zum Beitreten.`);
 }
 
 if (btnForceUpdate) btnForceUpdate.onclick = () => void updateErzwingen();
