@@ -53,7 +53,7 @@ const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 const MODUS_ERFASSEN = "erfassen";
 const MODUS_EINKAUFEN = "einkaufen";
 let modus = MODUS_ERFASSEN;
-const APP_VERSION = "1.0.115";
+const APP_VERSION = "1.0.116";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -1868,6 +1868,10 @@ if (btnMic && !SpeechRecognitionCtor) {
     mikStatusSetzen("Spracherkennung wird in diesem Browser nicht unterstuetzt.");
 }
 
+// Vor syncCodeUiEinrichten lesen: syncCodeLaden() generiert ggf. einen neuen Code und
+// überschreibt localStorage, sodass currentSyncCode danach nicht mehr zuverlässig ist.
+const _preExistingCode = syncCodeNormalisieren(localStorage.getItem(SYNC_CODE_KEY) || "");
+
 syncCodeUiEinrichten();
 
 // ?code=XXXX in der URL → verbinden (z.B. aus geteiltem Link)
@@ -1879,8 +1883,9 @@ if (_urlCode) {
     history.replaceState(null, "", _cleanUrl.toString());
     const _normalizedUrlCode = syncCodeNormalisieren(_urlCode);
     if (istGueltigerSyncCode(_normalizedUrlCode)) {
-        if (!currentSyncCode || currentSyncCode === _normalizedUrlCode) {
-            // Kein bestehender Code → direkt verbinden
+        const _hatVorherigenCode = istGueltigerSyncCode(_preExistingCode) && !istReservierterSyncCode(_preExistingCode);
+        if (!_hatVorherigenCode || _preExistingCode === _normalizedUrlCode) {
+            // Kein bestehender Code (oder gleicher Code) → direkt verbinden
             void syncCodeAnwenden(_normalizedUrlCode, true, { allowOccupied: true, userInitiated: true });
         } else {
             // Bestehender Code weicht ab → Nutzer muss explizit bestätigen
