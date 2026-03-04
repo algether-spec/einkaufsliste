@@ -8,7 +8,7 @@ window.addEventListener("load", () => {
         if (splash) splash.remove();
     }, 350);
 
-    setTimeout(autoResize, 200);
+    setTimeout(eingabeGroessenpassen, 200);
 });
 
 
@@ -54,7 +54,7 @@ const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 const MODUS_ERFASSEN = "erfassen";
 const MODUS_EINKAUFEN = "einkaufen";
 let modus = MODUS_ERFASSEN;
-const APP_VERSION = "1.0.110";
+const APP_VERSION = "1.0.111";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -74,7 +74,7 @@ const PHOTO_IDB_NAME = "einkaufsliste-photos";
 const PHOTO_IDB_STORE = "photos";
 let _photoDb = null;
 
-function openPhotoDb() {
+function fotoDatenbankOeffnen() {
     if (_photoDb) return Promise.resolve(_photoDb);
     return new Promise((resolve, reject) => {
         const req = indexedDB.open(PHOTO_IDB_NAME, 1);
@@ -84,8 +84,8 @@ function openPhotoDb() {
     });
 }
 
-function savePhotoToIdb(itemId, dataUrl) {
-    return openPhotoDb().then(db => new Promise((resolve, reject) => {
+function fotoInIdbSpeichern(itemId, dataUrl) {
+    return fotoDatenbankOeffnen().then(db => new Promise((resolve, reject) => {
         const tx = db.transaction(PHOTO_IDB_STORE, "readwrite");
         tx.objectStore(PHOTO_IDB_STORE).put(dataUrl, itemId);
         tx.oncomplete = resolve;
@@ -93,8 +93,8 @@ function savePhotoToIdb(itemId, dataUrl) {
     }));
 }
 
-function loadPhotoFromIdb(itemId) {
-    return openPhotoDb().then(db => new Promise(resolve => {
+function fotoAusIdbLaden(itemId) {
+    return fotoDatenbankOeffnen().then(db => new Promise(resolve => {
         const tx = db.transaction(PHOTO_IDB_STORE, "readonly");
         const req = tx.objectStore(PHOTO_IDB_STORE).get(itemId);
         req.onsuccess = () => resolve(req.result || null);
@@ -128,9 +128,9 @@ let ignoreResultsUntil = 0;
 let restartMicAfterManualCommit = false;
 // Sync-Zustand gebündelt – verhindert verstreute Mutations an Einzelvariablen
 const syncState = {
-    lock: Promise.resolve(),  // Promise-Chain-Lock für syncRemoteIfNeeded
+    lock: Promise.resolve(),  // Promise-Chain-Lock für syncWennNoetig
     pending: false,           // true = mindestens 1 Sync-Runde in der Queue
-    pullInFlight: false,      // true = refreshFromRemoteIfChanged läuft
+    pullInFlight: false,      // true = vonRemoteAktualisieren läuft
     dirty: false              // true = lokale Änderungen noch nicht bestätigt gesynct
 };
 let supabaseReady = false;
@@ -139,12 +139,12 @@ let lastSyncAt = "";
 const debugEnabled = new URLSearchParams(location.search).get("debug") === "1";
 let currentSyncCode = "";
 let syncEditMode = false;
-let backgroundSyncTimer = null;
-let remoteRealtimeChannel = null;
-let remoteRealtimeTimer = null;
-let autoUpdateCheckTimer = null;
-let autoUpdateInProgress = false;
-let applyingRemoteSnapshot = false;
+let hintergrundTimer = null;
+let echtzeitKanal = null;
+let echtzeitTimer = null;
+let updatePruefTimer = null;
+let updateLaeuft = false;
+let snapshotWirdAngewendet = false;
 let _speichernSyncTimer = null;
 
 if (authBar) authBar.hidden = true;
@@ -154,46 +154,46 @@ if (authBar) authBar.hidden = true;
    SPEICHERN & LADEN
 ====================== */
 
-function setSyncStatus(text, tone = "offline") {
+function syncStatusSetzen(text, tone = "offline") {
     if (!syncStatus) return;
     syncStatus.textContent = text;
     syncStatus.classList.remove("ok", "warn", "offline");
     syncStatus.classList.add(tone);
 }
 
-function setAuthStatus(text) {
+function authStatusSetzen(text) {
     if (!authStatus) return;
     authStatus.textContent = text;
 }
 
-function setInputErrorStatus(text) {
+function eingabeFehlerSetzen(text) {
     if (!inputErrorStatus) return;
     inputErrorStatus.textContent = String(text || "").trim();
 }
 
-function isNetworkUnavailable() {
+function keinNetzwerk() {
     return typeof navigator !== "undefined" && navigator.onLine === false;
 }
 
-function normalizeSyncCode(input) {
+function syncCodeNormalisieren(input) {
     const raw = String(input || "").toUpperCase();
     const letters = raw.replace(/[^A-Z]/g, "").slice(0, 4);
     const digits = raw.replace(/\D/g, "").slice(0, 4);
     return (letters + digits).slice(0, SYNC_CODE_LENGTH);
 }
 
-function isValidSyncCode(code) {
+function istGueltigerSyncCode(code) {
     return /^[A-Z]{4}[0-9]{4}$/.test(String(code || ""));
 }
 
-function isReservedSyncCode(code) {
+function istReservierterSyncCode(code) {
     return code === RESERVED_SYNC_CODE;
 }
 
-function generateSyncCode() {
+function syncCodeErzeugen() {
     const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     let nextCode = RESERVED_SYNC_CODE;
-    while (isReservedSyncCode(nextCode)) {
+    while (istReservierterSyncCode(nextCode)) {
         let letters = "";
         for (let i = 0; i < 4; i += 1) {
             letters += LETTERS[Math.floor(Math.random() * LETTERS.length)];
@@ -204,20 +204,20 @@ function generateSyncCode() {
     return nextCode;
 }
 
-function getStoredSyncCode() {
-    const stored = normalizeSyncCode(localStorage.getItem(SYNC_CODE_KEY) || "");
-    if (isValidSyncCode(stored) && !isReservedSyncCode(stored)) return stored;
-    const created = generateSyncCode();
+function syncCodeLaden() {
+    const stored = syncCodeNormalisieren(localStorage.getItem(SYNC_CODE_KEY) || "");
+    if (istGueltigerSyncCode(stored) && !istReservierterSyncCode(stored)) return stored;
+    const created = syncCodeErzeugen();
     localStorage.setItem(SYNC_CODE_KEY, created);
     return created;
 }
 
 
-async function useSyncCodeRpc(code, options = {}) {
+async function syncCodeRpcVerwenden(code, options = {}) {
     if (!supabaseClient) throw new Error("SUPABASE_CLIENT_MISSING");
-    if (!isValidSyncCode(code)) throw new Error("SYNC_CODE_FORMAT_INVALID");
-    if (isReservedSyncCode(code)) throw new Error("SYNC_CODE_RESERVED");
-    if (!(await ensureSupabaseAuth())) throw new Error("AUTH_REQUIRED");
+    if (!istGueltigerSyncCode(code)) throw new Error("SYNC_CODE_FORMAT_INVALID");
+    if (istReservierterSyncCode(code)) throw new Error("SYNC_CODE_RESERVED");
+    if (!(await authSicherstellen())) throw new Error("AUTH_REQUIRED");
 
     const allowCreate = options.allowCreate !== false;
     const requireNew = options.requireNew === true;
@@ -231,57 +231,57 @@ async function useSyncCodeRpc(code, options = {}) {
     return data;
 }
 
-async function touchSyncCodeUsage(code) {
+async function syncCodeNutzungAktualisieren(code) {
     if (!supabaseClient) return;
-    if (!isValidSyncCode(code)) return;
-    if (isReservedSyncCode(code)) return;
-    await useSyncCodeRpc(code, { allowCreate: true, requireNew: false });
+    if (!istGueltigerSyncCode(code)) return;
+    if (istReservierterSyncCode(code)) return;
+    await syncCodeRpcVerwenden(code, { allowCreate: true, requireNew: false });
 }
 
 
-async function generateAvailableSyncCode(maxAttempts = 25) {
-    let last = generateSyncCode();
+async function verfuegbarenSyncCodeErzeugen(maxAttempts = 25) {
+    let last = syncCodeErzeugen();
     for (let i = 0; i < maxAttempts; i += 1) {
-        const candidate = generateSyncCode();
-        if (candidate !== currentSyncCode && !isReservedSyncCode(candidate)) return candidate;
+        const candidate = syncCodeErzeugen();
+        if (candidate !== currentSyncCode && !istReservierterSyncCode(candidate)) return candidate;
         last = candidate;
     }
     return last;
 }
 
 
-async function applySyncCode(code, shouldReload = true, options = {}) {
+async function syncCodeAnwenden(code, shouldReload = true, options = {}) {
     const allowOccupied = options.allowOccupied !== false;
     const userInitiated = options.userInitiated === true;
-    const normalized = normalizeSyncCode(code);
-    if (!isValidSyncCode(normalized)) {
-        setAuthStatus("Bitte Code im Format AAAA1234 eingeben.");
-        if (userInitiated) setSyncEditMode(true);
+    const normalized = syncCodeNormalisieren(code);
+    if (!istGueltigerSyncCode(normalized)) {
+        authStatusSetzen("Bitte Code im Format AAAA1234 eingeben.");
+        if (userInitiated) syncBearbeitungsmodusSetzen(true);
         return;
     }
-    if (isReservedSyncCode(normalized)) {
-        openHelpViewer();
-        setAuthStatus("Code HELP0000 oeffnet die Kurzanleitung.");
+    if (istReservierterSyncCode(normalized)) {
+        hilfeViewerOeffnen();
+        authStatusSetzen("Code HELP0000 oeffnet die Kurzanleitung.");
         if (syncCodeInput) syncCodeInput.value = currentSyncCode || "";
-        if (userInitiated) setSyncEditMode(true);
+        if (userInitiated) syncBearbeitungsmodusSetzen(true);
         return;
     }
 
     try {
-        await useSyncCodeRpc(normalized, {
+        await syncCodeRpcVerwenden(normalized, {
             allowCreate: true,
             requireNew: !allowOccupied && normalized !== currentSyncCode
         });
     } catch (err) {
         console.warn("Code-Verbinden fehlgeschlagen:", err);
-        const hint = getSyncErrorHint(err);
-        if (String(formatSupabaseError(err)).includes("SYNC_CODE_ALREADY_EXISTS")) {
-            setAuthStatus("Code ist bereits belegt. Bitte anderen Code nutzen.");
+        const hint = syncFehlerHinweis(err);
+        if (String(fehlerFormatieren(err)).includes("SYNC_CODE_ALREADY_EXISTS")) {
+            authStatusSetzen("Code ist bereits belegt. Bitte anderen Code nutzen.");
         } else {
-            setAuthStatus(hint);
+            authStatusSetzen(hint);
         }
         if (userInitiated && syncCodeInput) {
-            setSyncEditMode(true);
+            syncBearbeitungsmodusSetzen(true);
             syncCodeInput.value = currentSyncCode || normalized || "";
             syncCodeInput.focus();
             syncCodeInput.select();
@@ -293,16 +293,16 @@ async function applySyncCode(code, shouldReload = true, options = {}) {
     localStorage.setItem(SYNC_CODE_KEY, currentSyncCode);
     if (syncCodeInput) syncCodeInput.value = currentSyncCode;
     if (btnSyncCodeDisplay) btnSyncCodeDisplay.textContent = currentSyncCode;
-    setAuthStatus(`Geraete-Code: ${currentSyncCode}`);
-    setInputErrorStatus("");
-    if (userInitiated) setSyncEditMode(false);
+    authStatusSetzen(`Geraete-Code: ${currentSyncCode}`);
+    eingabeFehlerSetzen("");
+    if (userInitiated) syncBearbeitungsmodusSetzen(false);
     if (syncCodeInput) syncCodeInput.blur();
-    if (supabaseClient) startRealtimeSync();
-    updateSyncDebug();
+    if (supabaseClient) echtzeitSyncStarten();
+    syncDebugAktualisieren();
     if (shouldReload) void laden();
 }
 
-function setSyncEditMode(enabled) {
+function syncBearbeitungsmodusSetzen(enabled) {
     syncEditMode = Boolean(enabled);
     const showAuthBar = syncEditMode && modus === MODUS_ERFASSEN;
     if (authBar) authBar.hidden = !showAuthBar;
@@ -313,31 +313,31 @@ function setSyncEditMode(enabled) {
     }
 }
 
-function openSyncEditorFromUser() {
-    setSyncEditMode(true);
+function syncEditorOeffnen() {
+    syncBearbeitungsmodusSetzen(true);
 }
 
-function setupSyncCodeUi() {
+function syncCodeUiEinrichten() {
     if (!authBar) return;
 
-    void applySyncCode(getStoredSyncCode(), false);
-    setSyncEditMode(false);
+    void syncCodeAnwenden(syncCodeLaden(), false);
+    syncBearbeitungsmodusSetzen(false);
 
     if (!hasSupabaseCredentials) {
         const msg = "Supabase nicht konfiguriert. App laeuft nur lokal.";
-        setAuthStatus(msg);
-        setInputErrorStatus(msg);
+        authStatusSetzen(msg);
+        eingabeFehlerSetzen(msg);
     } else if (!hasSupabaseLibrary) {
         const msg = "Supabase nicht geladen. Internet pruefen und neu laden.";
-        setAuthStatus(msg);
-        setInputErrorStatus(msg);
+        authStatusSetzen(msg);
+        eingabeFehlerSetzen(msg);
     } else {
-        setInputErrorStatus("");
+        eingabeFehlerSetzen("");
     }
 
     if (syncCodeInput) {
         syncCodeInput.addEventListener("input", () => {
-            const normalized = normalizeSyncCode(syncCodeInput.value);
+            const normalized = syncCodeNormalisieren(syncCodeInput.value);
             if (syncCodeInput.value !== normalized) {
                 const cursorPos = syncCodeInput.selectionStart ?? normalized.length;
                 const delta = normalized.length - syncCodeInput.value.length;
@@ -348,52 +348,52 @@ function setupSyncCodeUi() {
         });
     }
 
-    function setSyncButtonsDisabled(disabled) {
+    function syncButtonsDeaktivieren(disabled) {
         if (btnSyncApply) btnSyncApply.disabled = disabled;
         if (btnSyncNew) btnSyncNew.disabled = disabled;
     }
 
     if (btnSyncApply) {
         btnSyncApply.onclick = async () => {
-            setSyncButtonsDisabled(true);
-            setAuthStatus("Verbinde...");
+            syncButtonsDeaktivieren(true);
+            authStatusSetzen("Verbinde...");
             try {
-                await applySyncCode(syncCodeInput?.value || "", true, { allowOccupied: true, userInitiated: true });
+                await syncCodeAnwenden(syncCodeInput?.value || "", true, { allowOccupied: true, userInitiated: true });
             } finally {
-                setSyncButtonsDisabled(false);
+                syncButtonsDeaktivieren(false);
             }
         };
     }
 
     if (btnSyncNew) {
         btnSyncNew.onclick = async () => {
-            setSyncButtonsDisabled(true);
-            setAuthStatus("Neuer Code wird erstellt...");
+            syncButtonsDeaktivieren(true);
+            authStatusSetzen("Neuer Code wird erstellt...");
             try {
-                const newCode = await generateAvailableSyncCode();
-                await applySyncCode(newCode, true, { allowOccupied: false, userInitiated: true });
+                const newCode = await verfuegbarenSyncCodeErzeugen();
+                await syncCodeAnwenden(newCode, true, { allowOccupied: false, userInitiated: true });
             } finally {
-                setSyncButtonsDisabled(false);
+                syncButtonsDeaktivieren(false);
             }
         };
     }
 
     if (btnSyncCodeEdit) {
-        btnSyncCodeEdit.onclick = () => setSyncEditMode(!syncEditMode);
+        btnSyncCodeEdit.onclick = () => syncBearbeitungsmodusSetzen(!syncEditMode);
     }
 
     if (btnSyncCodeDisplay) {
-        btnSyncCodeDisplay.onclick = () => openSyncEditorFromUser();
+        btnSyncCodeDisplay.onclick = () => syncEditorOeffnen();
     }
 
     if (btnSyncCodeShare) {
-        btnSyncCodeShare.onclick = () => void shareSyncCode();
+        btnSyncCodeShare.onclick = () => void syncCodeTeilen();
     }
 }
 
-async function shareSyncCode() {
-    if (!currentSyncCode || !isValidSyncCode(currentSyncCode)) {
-        setAuthStatus("Kein gültiger Code zum Teilen vorhanden.");
+async function syncCodeTeilen() {
+    if (!currentSyncCode || !istGueltigerSyncCode(currentSyncCode)) {
+        authStatusSetzen("Kein gültiger Code zum Teilen vorhanden.");
         return;
     }
     const shareUrl = new URL(location.origin + location.pathname);
@@ -415,34 +415,34 @@ async function shareSyncCode() {
 
     if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(url);
-        setAuthStatus("Link kopiert! Zum Einfügen gedrückt halten.");
+        authStatusSetzen("Link kopiert! Zum Einfügen gedrückt halten.");
     } else {
         prompt("Link kopieren:", url);
     }
 }
 
-async function autoReconnectAndSync() {
+async function autoWiederverbinden() {
     if (!supabaseClient) return;
-    if (isNetworkUnavailable()) return;
+    if (keinNetzwerk()) return;
     if (syncEditMode) return;
 
-    const candidate = normalizeSyncCode(currentSyncCode || localStorage.getItem(SYNC_CODE_KEY) || "");
-    if (!isValidSyncCode(candidate) || isReservedSyncCode(candidate)) return;
+    const candidate = syncCodeNormalisieren(currentSyncCode || localStorage.getItem(SYNC_CODE_KEY) || "");
+    if (!istGueltigerSyncCode(candidate) || istReservierterSyncCode(candidate)) return;
 
     if (currentSyncCode !== candidate) {
-        setAuthStatus("Online erkannt. Verbinde mit gespeichertem Code...");
-        await applySyncCode(candidate, false, { allowOccupied: true });
+        authStatusSetzen("Online erkannt. Verbinde mit gespeichertem Code...");
+        await syncCodeAnwenden(candidate, false, { allowOccupied: true });
     }
 
     if (currentSyncCode === candidate) {
-        setAuthStatus("Online erkannt. Synchronisiere...");
-        await syncRemoteIfNeeded();
+        authStatusSetzen("Online erkannt. Synchronisiere...");
+        await syncWennNoetig();
     }
 }
 
 // normalizeListData, listDataSignature → utils.js
 
-function getDeviceId() {
+function geraeteIdLaden() {
     const existing = String(localStorage.getItem(DEVICE_ID_KEY) || "").trim();
     if (existing) return existing;
     const created = window.crypto?.randomUUID
@@ -452,12 +452,12 @@ function getDeviceId() {
     return created;
 }
 
-function getSyncMetaStorageKey() {
+function syncMetaSchuessel() {
     if (!currentSyncCode) return "";
     return SYNC_META_PREFIX + currentSyncCode;
 }
 
-function createEmptySyncMeta() {
+function leereSyncMetaErstellen() {
     return {
         opSeq: 0,
         pendingOps: [],
@@ -468,26 +468,26 @@ function createEmptySyncMeta() {
 
 // normalizeSnapshotData → utils.js
 
-function loadSyncMeta() {
-    const key = getSyncMetaStorageKey();
-    if (!key) return createEmptySyncMeta();
+function syncMetaLaden() {
+    const key = syncMetaSchuessel();
+    if (!key) return leereSyncMetaErstellen();
     const raw = localStorage.getItem(key);
-    if (!raw) return createEmptySyncMeta();
+    if (!raw) return leereSyncMetaErstellen();
     try {
         const parsed = JSON.parse(raw);
-        const meta = createEmptySyncMeta();
+        const meta = leereSyncMetaErstellen();
         meta.opSeq = Number.isFinite(parsed?.opSeq) ? parsed.opSeq : 0;
         meta.pendingOps = Array.isArray(parsed?.pendingOps) ? parsed.pendingOps : [];
         meta.snapshot = normalizeSnapshotData(parsed?.snapshot || []);
         meta.lastRemoteSyncAt = String(parsed?.lastRemoteSyncAt || "");
         return meta;
     } catch {
-        return createEmptySyncMeta();
+        return leereSyncMetaErstellen();
     }
 }
 
-function saveSyncMeta(meta) {
-    const key = getSyncMetaStorageKey();
+function syncMetaSpeichern(meta) {
+    const key = syncMetaSchuessel();
     if (!key) return;
     localStorage.setItem(key, JSON.stringify({
         opSeq: Number.isFinite(meta?.opSeq) ? meta.opSeq : 0,
@@ -497,15 +497,15 @@ function saveSyncMeta(meta) {
     }));
 }
 
-function nextOpId(meta) {
+function naechsteOpId(meta) {
     const seq = Number.isFinite(meta.opSeq) ? meta.opSeq + 1 : 1;
     meta.opSeq = seq;
-    return `${getDeviceId()}-${seq}`;
+    return `${geraeteIdLaden()}-${seq}`;
 }
 
-function queueChangeOps(currentData) {
-    if (applyingRemoteSnapshot) return false;
-    const meta = loadSyncMeta();
+function aenderungenEinstellen(currentData) {
+    if (snapshotWirdAngewendet) return false;
+    const meta = syncMetaLaden();
     const previous = normalizeSnapshotData(meta.snapshot);
     const current = normalizeSnapshotData(currentData);
     const previousById = new Map(previous.map(item => [item.itemId, item]));
@@ -520,7 +520,7 @@ function queueChangeOps(currentData) {
             || prev.position !== item.position;
         if (!changed) continue;
         meta.pendingOps.push({
-            opId: nextOpId(meta),
+            opId: naechsteOpId(meta),
             opType: "upsert",
             itemId: item.itemId,
             text: item.text,
@@ -534,7 +534,7 @@ function queueChangeOps(currentData) {
     for (const prev of previous) {
         if (currentById.has(prev.itemId)) continue;
         meta.pendingOps.push({
-            opId: nextOpId(meta),
+            opId: naechsteOpId(meta),
             opType: "delete",
             itemId: prev.itemId,
             text: prev.text || TOMBSTONE_TEXT,
@@ -546,11 +546,11 @@ function queueChangeOps(currentData) {
     }
 
     meta.snapshot = current;
-    saveSyncMeta(meta);
+    syncMetaSpeichern(meta);
     return queued;
 }
 
-function writeSnapshotToUi(snapshotData) {
+function snapshotInUiSchreiben(snapshotData) {
     // In-Memory sortieren vor DOM-Write: vermeidet doppeltes datenInListeSchreiben + DOM-Roundtrip
     const base = normalizeSnapshotData(snapshotData)
         .sort((a, b) => a.position - b.position)
@@ -558,19 +558,19 @@ function writeSnapshotToUi(snapshotData) {
     const sorted = modus === MODUS_EINKAUFEN
         ? sortDataByStoreGroups(base)
         : sortDataByCaptureTextFirst(base);
-    applyingRemoteSnapshot = true;
+    snapshotWirdAngewendet = true;
     try {
         datenInListeSchreiben(sorted);
         speichernLokal(sorted);
     } finally {
-        applyingRemoteSnapshot = false;
+        snapshotWirdAngewendet = false;
     }
 }
 
 // generateItemId, normalizeForGroupMatch, getGroupIndex, isPhotoEntryText,
 // sortDataByCaptureTextFirst, sortDataByStoreGroups → utils.js
 
-function sortListByCaptureTextFirst() {
+function listeNachErfassungSortieren() {
     const daten = normalizeListData(datenAusListeLesen());
     if (!daten.length) return false;
     const sortierte = sortDataByCaptureTextFirst(daten);
@@ -579,7 +579,7 @@ function sortListByCaptureTextFirst() {
     return true;
 }
 
-function sortListByStoreGroups() {
+function listeNachGruppenSortieren() {
     const daten = normalizeListData(datenAusListeLesen());
     if (!daten.length) return false;
     const sortierte = sortDataByStoreGroups(daten);
@@ -588,17 +588,17 @@ function sortListByStoreGroups() {
     return true;
 }
 
-function shortUserId(id) {
+function kurzeId(id) {
     if (!id) return "-";
     if (id.length <= 12) return id;
     return id.slice(0, 8) + "..." + id.slice(-4);
 }
 
-function formatTimeIso(date) {
+function zeitFormatieren(date) {
     return date.toISOString().replace("T", " ").slice(0, 19) + "Z";
 }
 
-function formatSupabaseError(err) {
+function fehlerFormatieren(err) {
     const code = String(err?.code || "").trim();
     const message = String(err?.message || "").trim();
     const details = String(err?.details || "").trim();
@@ -606,8 +606,8 @@ function formatSupabaseError(err) {
     return [code, message, details, hint].filter(Boolean).join(" | ");
 }
 
-function getSyncErrorHint(err) {
-    const raw = formatSupabaseError(err);
+function syncFehlerHinweis(err) {
+    const raw = fehlerFormatieren(err);
     const message = raw.toLowerCase();
     if (!message) return "Bitte Verbindung und Supabase-Einstellungen pruefen.";
     if (message.includes("json parse error") && message.includes("unrecognized token '<'")) {
@@ -640,13 +640,13 @@ function getSyncErrorHint(err) {
     return "Sync-Fehler: " + raw.slice(0, 120);
 }
 
-function reloadWithCacheBust() {
+function seitenNeuladen() {
     const url = new URL(location.href);
     url.searchParams.set("u", String(Date.now()));
     location.replace(url.toString());
 }
 
-function waitForSwInstalled(worker, timeoutMs = 10000) {
+function aufSwWarten(worker, timeoutMs = 10000) {
     if (!worker || worker.state === "installed" || worker.state === "redundant") {
         return Promise.resolve();
     }
@@ -662,7 +662,7 @@ function waitForSwInstalled(worker, timeoutMs = 10000) {
     });
 }
 
-function waitForControllerChange(timeoutMs = 4500) {
+function aufControllerWarten(timeoutMs = 4500) {
     return new Promise(resolve => {
         let finished = false;
         const done = value => {
@@ -678,24 +678,24 @@ function waitForControllerChange(timeoutMs = 4500) {
     });
 }
 
-async function activateWaitingServiceWorker(registration) {
+async function wartendenSwAktivieren(registration) {
     if (!registration?.waiting) return false;
-    const changedPromise = waitForControllerChange();
+    const changedPromise = aufControllerWarten();
     registration.waiting.postMessage({ type: "SKIP_WAITING" });
     return changedPromise;
 }
 
-async function forceAppUpdate() {
+async function updateErzwingen() {
     // Nur bei aktiver Benutzereingabe blockieren – Hintergrund-Sync ist nach Reload sicher
     const activeInput = isListening || (multiInput && multiInput.value.trim().length > 0);
     if (activeInput) {
-        setSyncStatus("Update blockiert: Eingabe beenden", "warn");
-        setAuthStatus("Bitte Mikrofon stoppen und Eingabe mit 'Übernehmen' speichern.");
+        syncStatusSetzen("Update blockiert: Eingabe beenden", "warn");
+        authStatusSetzen("Bitte Mikrofon stoppen und Eingabe mit 'Übernehmen' speichern.");
         return;
     }
 
     if (btnForceUpdate) btnForceUpdate.disabled = true;
-    setSyncStatus("Update: wird angewendet...", "warn");
+    syncStatusSetzen("Update: wird angewendet...", "warn");
 
     try {
         // Caches immer zuerst leeren – damit nach Reload keine alten Dateien geliefert werden
@@ -715,11 +715,11 @@ async function forceAppUpdate() {
                 await registration.update();
                 // Warten bis neue SW fertig installiert ist, bevor aktiviert wird
                 if (!registration.waiting && registration.installing) {
-                    await waitForSwInstalled(registration.installing);
+                    await aufSwWarten(registration.installing);
                 }
-                if (await activateWaitingServiceWorker(registration)) {
-                    setSyncStatus("Update: aktiv", "ok");
-                    reloadWithCacheBust();
+                if (await wartendenSwAktivieren(registration)) {
+                    syncStatusSetzen("Update: aktiv", "ok");
+                    seitenNeuladen();
                     return;
                 }
             }
@@ -730,16 +730,16 @@ async function forceAppUpdate() {
         // Kleine Pause, damit SW-Abmeldung und Cache-Loeschung sicher wirksam sind.
         await new Promise(resolve => setTimeout(resolve, 180));
 
-        reloadWithCacheBust();
+        seitenNeuladen();
     } catch (err) {
         console.warn("Update fehlgeschlagen:", err);
-        setSyncStatus("Update fehlgeschlagen", "offline");
-        setAuthStatus("Update fehlgeschlagen. Bitte Seite neu laden.");
+        syncStatusSetzen("Update fehlgeschlagen", "offline");
+        authStatusSetzen("Update fehlgeschlagen. Bitte Seite neu laden.");
         if (btnForceUpdate) btnForceUpdate.disabled = false;
     }
 }
 
-function hasActiveEditingState() {
+function hatAktiveBearbeitung() {
     return Boolean(
         isListening
         || (multiInput && multiInput.value.trim().length > 0)
@@ -748,7 +748,7 @@ function hasActiveEditingState() {
     );
 }
 
-function hasPendingUpdateRisk() {
+function hatUpdateRisiko() {
     return Boolean(
         isListening
         || (multiInput && multiInput.value.trim().length > 0)
@@ -757,7 +757,7 @@ function hasPendingUpdateRisk() {
     );
 }
 
-async function hasWaitingServiceWorkerUpdate() {
+async function hatWartendesUpdate() {
     if (!("serviceWorker" in navigator)) return false;
     const registrations = await navigator.serviceWorker.getRegistrations();
     for (const registration of registrations) {
@@ -766,55 +766,55 @@ async function hasWaitingServiceWorkerUpdate() {
         if (registration.waiting) return true;
         // Neue SW lädt noch (installing) – warten bis fertig installiert
         if (registration.installing) {
-            await waitForSwInstalled(registration.installing);
+            await aufSwWarten(registration.installing);
         }
         if (registration.waiting) return true;
     }
     return false;
 }
 
-async function maybeAutoUpdate(trigger = "auto") {
-    if (autoUpdateInProgress) return;
+async function autoUpdatePruefen(trigger = "auto") {
+    if (updateLaeuft) return;
 
     try {
-        const hasUpdate = await hasWaitingServiceWorkerUpdate();
+        const hasUpdate = await hatWartendesUpdate();
         if (!hasUpdate) return;
 
-        if (hasActiveEditingState()) {
-            setSyncStatus("Update verfuegbar", "warn");
-            setAuthStatus("Neue Version erkannt. Bei Leerlauf wird automatisch aktualisiert.");
+        if (hatAktiveBearbeitung()) {
+            syncStatusSetzen("Update verfuegbar", "warn");
+            authStatusSetzen("Neue Version erkannt. Bei Leerlauf wird automatisch aktualisiert.");
             return;
         }
 
-        autoUpdateInProgress = true;
-        setAuthStatus(`Neue Version erkannt (${trigger}). Update startet...`);
-        await forceAppUpdate();
+        updateLaeuft = true;
+        authStatusSetzen(`Neue Version erkannt (${trigger}). Update startet...`);
+        await updateErzwingen();
     } catch (err) {
         console.warn("Auto-Update-Pruefung fehlgeschlagen:", err);
     } finally {
-        autoUpdateInProgress = false;
+        updateLaeuft = false;
     }
 }
 
-function setupAutoUpdateChecks() {
+function autoUpdateEinrichten() {
     if (!("serviceWorker" in navigator)) return;
-    if (autoUpdateCheckTimer) clearInterval(autoUpdateCheckTimer);
+    if (updatePruefTimer) clearInterval(updatePruefTimer);
 
-    autoUpdateCheckTimer = setInterval(() => {
+    updatePruefTimer = setInterval(() => {
         if (document.hidden) return;
-        void maybeAutoUpdate("interval");
+        void autoUpdatePruefen("interval");
     }, AUTO_UPDATE_CHECK_INTERVAL_MS);
 
-    window.addEventListener("focus", () => void maybeAutoUpdate("focus"));
-    window.addEventListener("online", () => void maybeAutoUpdate("online"));
+    window.addEventListener("focus", () => void autoUpdatePruefen("focus"));
+    window.addEventListener("online", () => void autoUpdatePruefen("online"));
     document.addEventListener("visibilitychange", () => {
-        if (!document.hidden) void maybeAutoUpdate("visible");
+        if (!document.hidden) void autoUpdatePruefen("visible");
     });
 
-    void maybeAutoUpdate("startup");
+    void autoUpdatePruefen("startup");
 }
 
-function updateSyncDebug() {
+function syncDebugAktualisieren() {
     if (!syncDebug) return;
     if (!debugEnabled) {
         syncDebug.hidden = true;
@@ -822,38 +822,38 @@ function updateSyncDebug() {
     }
 
     syncDebug.hidden = false;
-    const uid = shortUserId(supabaseUserId);
+    const uid = kurzeId(supabaseUserId);
     const syncText = lastSyncAt || "-";
     const code = currentSyncCode || "-";
     syncDebug.textContent = `debug code=${code} uid=${uid} lastSync=${syncText}`;
 }
 
-function stopRealtimeSync() {
-    if (remoteRealtimeTimer) {
-        clearTimeout(remoteRealtimeTimer);
-        remoteRealtimeTimer = null;
+function echtzeitSyncStoppen() {
+    if (echtzeitTimer) {
+        clearTimeout(echtzeitTimer);
+        echtzeitTimer = null;
     }
-    if (!supabaseClient || !remoteRealtimeChannel) return;
+    if (!supabaseClient || !echtzeitKanal) return;
     try {
-        supabaseClient.removeChannel(remoteRealtimeChannel);
+        supabaseClient.removeChannel(echtzeitKanal);
     } catch (err) {
         console.warn("Realtime-Channel konnte nicht entfernt werden:", err);
     }
-    remoteRealtimeChannel = null;
+    echtzeitKanal = null;
 }
 
-function scheduleRealtimeRefresh() {
-    if (remoteRealtimeTimer) clearTimeout(remoteRealtimeTimer);
-    remoteRealtimeTimer = setTimeout(() => {
-        void refreshFromRemoteIfChanged();
+function echtzeitAktualisierungPlanen() {
+    if (echtzeitTimer) clearTimeout(echtzeitTimer);
+    echtzeitTimer = setTimeout(() => {
+        void vonRemoteAktualisieren();
     }, 250);
 }
 
-function startRealtimeSync() {
+function echtzeitSyncStarten() {
     if (!supabaseClient || !currentSyncCode) return;
-    stopRealtimeSync();
+    echtzeitSyncStoppen();
 
-    remoteRealtimeChannel = supabaseClient
+    echtzeitKanal = supabaseClient
         .channel(`shopping_items_${currentSyncCode}`)
         .on(
             "postgres_changes",
@@ -865,32 +865,32 @@ function startRealtimeSync() {
             },
             () => {
                 if (document.hidden) return;
-                scheduleRealtimeRefresh();
+                echtzeitAktualisierungPlanen();
             }
         )
         .subscribe(status => {
             if (status === "CHANNEL_ERROR") {
                 console.warn("Realtime-Channel Fehler, nutze Polling weiter.");
-                stopRealtimeSync();
+                echtzeitSyncStoppen();
             }
         });
 }
 
-async function ensureSupabaseAuth() {
-    if (isNetworkUnavailable()) {
-        setInputErrorStatus("");
-        setSyncStatus("Sync: Offline (lokal)", "offline");
+async function authSicherstellen() {
+    if (keinNetzwerk()) {
+        eingabeFehlerSetzen("");
+        syncStatusSetzen("Sync: Offline (lokal)", "offline");
         return false;
     }
     if (!supabaseClient) {
-        setInputErrorStatus("Supabase Client nicht initialisiert. config.js / Internet pruefen.");
-        setSyncStatus("Sync: Offline (lokal)", "offline");
+        eingabeFehlerSetzen("Supabase Client nicht initialisiert. config.js / Internet pruefen.");
+        syncStatusSetzen("Sync: Offline (lokal)", "offline");
         return false;
     }
     if (supabaseReady && supabaseUserId) return true;
 
     try {
-        setSyncStatus("Sync: Verbinde...", "warn");
+        syncStatusSetzen("Sync: Verbinde...", "warn");
         const sessionResult = await supabaseClient.auth.getSession();
         if (sessionResult?.error) throw sessionResult.error;
         let user = sessionResult?.data?.session?.user || null;
@@ -902,26 +902,26 @@ async function ensureSupabaseAuth() {
         }
 
         if (!user?.id) {
-            setInputErrorStatus("Anonyme Anmeldung fehlgeschlagen. Supabase Auth/Anon-Login pruefen.");
-            setSyncStatus("Anonyme Anmeldung fehlgeschlagen. Supabase Auth/Anon-Login pruefen.", "offline");
-            updateSyncDebug();
+            eingabeFehlerSetzen("Anonyme Anmeldung fehlgeschlagen. Supabase Auth/Anon-Login pruefen.");
+            syncStatusSetzen("Anonyme Anmeldung fehlgeschlagen. Supabase Auth/Anon-Login pruefen.", "offline");
+            syncDebugAktualisieren();
             return false;
         }
         supabaseUserId = user.id;
         supabaseReady = true;
-        startRealtimeSync();
-        setInputErrorStatus("");
-        setSyncStatus("Sync: Verbunden", "ok");
-        updateSyncDebug();
+        echtzeitSyncStarten();
+        eingabeFehlerSetzen("");
+        syncStatusSetzen("Sync: Verbunden", "ok");
+        syncDebugAktualisieren();
         return true;
     } catch (err) {
         console.warn("Supabase Auth nicht verfuegbar:", err);
         supabaseReady = false;
         supabaseUserId = "";
-        stopRealtimeSync();
-        setInputErrorStatus(getSyncErrorHint(err));
-        setSyncStatus(getSyncErrorHint(err), "offline");
-        updateSyncDebug();
+        echtzeitSyncStoppen();
+        eingabeFehlerSetzen(syncFehlerHinweis(err));
+        syncStatusSetzen(syncFehlerHinweis(err), "offline");
+        syncDebugAktualisieren();
         return false;
     }
 }
@@ -950,13 +950,13 @@ function datenInListeSchreiben(daten) {
     liste.appendChild(fragment);
 }
 
-function applyModeSortAfterLoad() {
+function modusSortierungAnwenden() {
     if (modus === MODUS_EINKAUFEN) {
-        sortListByStoreGroups();
+        listeNachGruppenSortieren();
         return;
     }
     if (modus === MODUS_ERFASSEN) {
-        sortListByCaptureTextFirst();
+        listeNachErfassungSortieren();
     }
 }
 
@@ -965,7 +965,7 @@ function speichernLokal(daten) {
         if (!isPhotoEntryText(item.text)) return item;
         const parsed = parsePhotoEntryText(item.text);
         if (!parsed?.imageSrc?.startsWith("data:")) return item; // bereits eine IDB-Referenz
-        savePhotoToIdb(item.itemId, parsed.imageSrc).catch(err => console.warn("Foto-IDB Schreibfehler:", err));
+        fotoInIdbSpeichern(item.itemId, parsed.imageSrc).catch(err => console.warn("Foto-IDB Schreibfehler:", err));
         const ref = IMAGE_IDB_REF_PREFIX + item.itemId + (parsed.caption ? IMAGE_ENTRY_CAPTION_MARKER + parsed.caption : "");
         return { ...item, text: ref };
     });
@@ -994,7 +994,7 @@ async function ladenLokal() {
             const markerIndex = withoutPrefix.indexOf(IMAGE_ENTRY_CAPTION_MARKER);
             const refId = markerIndex === -1 ? withoutPrefix : withoutPrefix.slice(0, markerIndex);
             const caption = markerIndex === -1 ? "" : withoutPrefix.slice(markerIndex + IMAGE_ENTRY_CAPTION_MARKER.length);
-            const dataUrl = await loadPhotoFromIdb(refId || item.itemId);
+            const dataUrl = await fotoAusIdbLaden(refId || item.itemId);
             if (dataUrl) return { ...item, text: buildPhotoEntryText(dataUrl, caption) };
             return item;
         }));
@@ -1004,9 +1004,9 @@ async function ladenLokal() {
     }
 }
 
-async function ladenRemote() {
+async function remoteEintraegeLaden() {
     if (!supabaseClient) return null;
-    if (!(await ensureSupabaseAuth())) return null;
+    if (!(await authSicherstellen())) return null;
 
     const { data, error } = await supabaseClient
         .from(SUPABASE_TABLE)
@@ -1028,26 +1028,26 @@ async function ladenRemote() {
     }));
 }
 
-async function uploadPendingOps() {
-    const meta = loadSyncMeta();
+async function ausstehendHochladen() {
+    const meta = syncMetaLaden();
     if (!Array.isArray(meta.pendingOps) || meta.pendingOps.length === 0) return false;
     if (!supabaseClient) return false;
-    if (!(await ensureSupabaseAuth())) return false;
+    if (!(await authSicherstellen())) return false;
 
     const batch = meta.pendingOps.slice(0, SYNC_OP_BATCH_SIZE);
     const { error } = await supabaseClient.rpc("apply_shopping_ops", {
         p_sync_code: currentSyncCode,
-        p_device_id: getDeviceId(),
+        p_device_id: geraeteIdLaden(),
         p_ops: batch
     });
     if (error) throw error;
 
     meta.pendingOps = meta.pendingOps.slice(batch.length);
-    saveSyncMeta(meta);
+    syncMetaSpeichern(meta);
     return batch.length > 0;
 }
 
-function applyRemoteRowsToSnapshot(snapshotData, remoteRows) {
+function remoteZeilenAnwenden(snapshotData, remoteRows) {
     const snapshotMap = new Map(normalizeSnapshotData(snapshotData).map(item => [item.itemId, item]));
     let latestUpdatedAt = "";
 
@@ -1076,9 +1076,9 @@ function applyRemoteRowsToSnapshot(snapshotData, remoteRows) {
     };
 }
 
-async function fetchRemoteChangesSince(lastRemoteSyncAt) {
+async function remoteAenderungenLaden(lastRemoteSyncAt) {
     if (!supabaseClient) return [];
-    if (!(await ensureSupabaseAuth())) return [];
+    if (!(await authSicherstellen())) return [];
 
     let query = supabaseClient
         .from(SUPABASE_TABLE)
@@ -1104,24 +1104,24 @@ async function fetchRemoteChangesSince(lastRemoteSyncAt) {
     }));
 }
 
-async function fetchAndApplyRemoteChanges(authStatusMsg) {
-    const meta = loadSyncMeta();
-    const remoteChanges = await fetchRemoteChangesSince(meta.lastRemoteSyncAt);
+async function remoteAenderungenAnwenden(authStatusMsg) {
+    const meta = syncMetaLaden();
+    const remoteChanges = await remoteAenderungenLaden(meta.lastRemoteSyncAt);
     if (remoteChanges.length > 0) {
-        const applied = applyRemoteRowsToSnapshot(meta.snapshot, remoteChanges);
+        const applied = remoteZeilenAnwenden(meta.snapshot, remoteChanges);
         meta.snapshot = applied.snapshot;
         if (applied.latestUpdatedAt) meta.lastRemoteSyncAt = applied.latestUpdatedAt;
-        saveSyncMeta(meta);
-        writeSnapshotToUi(meta.snapshot);
-        setAuthStatus(authStatusMsg);
+        syncMetaSpeichern(meta);
+        snapshotInUiSchreiben(meta.snapshot);
+        authStatusSetzen(authStatusMsg);
     }
 }
 
-function syncRemoteIfNeeded() {
+function syncWennNoetig() {
     if (!supabaseClient) return Promise.resolve();
-    if (isNetworkUnavailable()) {
-        setInputErrorStatus("");
-        setSyncStatus("Sync: Offline (lokal)", "offline");
+    if (keinNetzwerk()) {
+        eingabeFehlerSetzen("");
+        syncStatusSetzen("Sync: Offline (lokal)", "offline");
         return Promise.resolve();
     }
     // Bereits eine Sync-Runde in der Queue: kein weiteres Stacking nötig
@@ -1129,83 +1129,83 @@ function syncRemoteIfNeeded() {
     syncState.pending = true;
     syncState.lock = syncState.lock.then(async () => {
         // pending=false JETZT: erlaubt, dass während der Ausführung ein neuer Sync eingereiht wird,
-        // damit Änderungen die während uploadPendingOps() entstehen nicht verloren gehen.
+        // damit Änderungen die während ausstehendHochladen() entstehen nicht verloren gehen.
         // Die Promise-Chain selbst garantiert sequenzielle Ausführung (kein paralleles Doppel-Upload).
         syncState.pending = false;
-        setSyncStatus("Sync: Synchronisiere...", "warn");
+        syncStatusSetzen("Sync: Synchronisiere...", "warn");
         // In Batches leeren, damit große Offline-Queues idempotent abgearbeitet werden
-        while (await uploadPendingOps()) { }
-        await fetchAndApplyRemoteChanges("Liste synchronisiert.");
-        lastSyncAt = formatTimeIso(new Date());
-        syncState.dirty = loadSyncMeta().pendingOps.length > 0;
-        setInputErrorStatus("");
-        setSyncStatus("Sync: Verbunden", "ok");
-        updateSyncDebug();
+        while (await ausstehendHochladen()) { }
+        await remoteAenderungenAnwenden("Liste synchronisiert.");
+        lastSyncAt = zeitFormatieren(new Date());
+        syncState.dirty = syncMetaLaden().pendingOps.length > 0;
+        eingabeFehlerSetzen("");
+        syncStatusSetzen("Sync: Verbunden", "ok");
+        syncDebugAktualisieren();
     }).catch(err => {
         syncState.pending = false;
-        console.warn("Remote-Sync fehlgeschlagen, lokal bleibt aktiv:", err, formatSupabaseError(err));
-        setSyncStatus("Sync: Offline (lokal)", "offline");
-        const hint = getSyncErrorHint(err);
+        console.warn("Remote-Sync fehlgeschlagen, lokal bleibt aktiv:", err, fehlerFormatieren(err));
+        syncStatusSetzen("Sync: Offline (lokal)", "offline");
+        const hint = syncFehlerHinweis(err);
         const isNetworkHint = hint.toLowerCase().includes("cloud-sync derzeit nicht erreichbar")
             || hint.toLowerCase().includes("netzwerkfehler");
-        setInputErrorStatus(isNetworkHint ? "" : hint);
-        updateSyncDebug();
+        eingabeFehlerSetzen(isNetworkHint ? "" : hint);
+        syncDebugAktualisieren();
     });
     return syncState.lock;
 }
 
-async function refreshFromRemoteIfChanged() {
+async function vonRemoteAktualisieren() {
     if (!supabaseClient) return;
-    if (isNetworkUnavailable()) {
-        setInputErrorStatus("");
-        setSyncStatus("Sync: Offline (lokal)", "offline");
+    if (keinNetzwerk()) {
+        eingabeFehlerSetzen("");
+        syncStatusSetzen("Sync: Offline (lokal)", "offline");
         return;
     }
     if (syncState.pending || syncState.pullInFlight) return;
 
     syncState.pullInFlight = true;
     try {
-        if (loadSyncMeta().pendingOps.length > 0) return;
-        await fetchAndApplyRemoteChanges("Liste von anderem Geraet aktualisiert.");
+        if (syncMetaLaden().pendingOps.length > 0) return;
+        await remoteAenderungenAnwenden("Liste von anderem Geraet aktualisiert.");
 
-        lastSyncAt = formatTimeIso(new Date());
-        setInputErrorStatus("");
-        setSyncStatus("Sync: Verbunden", "ok");
-        updateSyncDebug();
+        lastSyncAt = zeitFormatieren(new Date());
+        eingabeFehlerSetzen("");
+        syncStatusSetzen("Sync: Verbunden", "ok");
+        syncDebugAktualisieren();
     } catch (err) {
-        console.warn("Remote-Refresh fehlgeschlagen:", err, formatSupabaseError(err));
-        setSyncStatus("Sync: Offline (lokal)", "offline");
-        const hint = getSyncErrorHint(err);
+        console.warn("Remote-Refresh fehlgeschlagen:", err, fehlerFormatieren(err));
+        syncStatusSetzen("Sync: Offline (lokal)", "offline");
+        const hint = syncFehlerHinweis(err);
         const isNetworkHint = hint.toLowerCase().includes("cloud-sync derzeit nicht erreichbar")
             || hint.toLowerCase().includes("netzwerkfehler");
-        setInputErrorStatus(isNetworkHint ? "" : hint);
-        updateSyncDebug();
+        eingabeFehlerSetzen(isNetworkHint ? "" : hint);
+        syncDebugAktualisieren();
     } finally {
         syncState.pullInFlight = false;
     }
 }
 
 function _onSyncFocus() {
-    if (isNetworkUnavailable()) return;
-    void refreshFromRemoteIfChanged();
+    if (keinNetzwerk()) return;
+    void vonRemoteAktualisieren();
 }
 function _onSyncOnline() {
-    void autoReconnectAndSync().catch(err => console.warn("autoReconnectAndSync fehlgeschlagen:", err));
-    void refreshFromRemoteIfChanged();
+    void autoWiederverbinden().catch(err => console.warn("autoWiederverbinden fehlgeschlagen:", err));
+    void vonRemoteAktualisieren();
 }
 function _onSyncVisibilityChange() {
-    if (!document.hidden && !isNetworkUnavailable()) void refreshFromRemoteIfChanged();
+    if (!document.hidden && !keinNetzwerk()) void vonRemoteAktualisieren();
 }
 
-function startBackgroundSync() {
+function hintergrundSyncStarten() {
     if (!supabaseClient) return;
-    if (backgroundSyncTimer) clearInterval(backgroundSyncTimer);
+    if (hintergrundTimer) clearInterval(hintergrundTimer);
 
-    backgroundSyncTimer = setInterval(() => {
+    hintergrundTimer = setInterval(() => {
         if (document.hidden) return;
-        if (isNetworkUnavailable()) return;
-        if (remoteRealtimeChannel) return;  // Realtime aktiv – kein Polling nötig
-        void refreshFromRemoteIfChanged();
+        if (keinNetzwerk()) return;
+        if (echtzeitKanal) return;  // Realtime aktiv – kein Polling nötig
+        void vonRemoteAktualisieren();
     }, BACKGROUND_SYNC_INTERVAL_MS);
 
     window.removeEventListener("focus", _onSyncFocus);
@@ -1220,31 +1220,31 @@ function speichern(forceOverwrite = false) {
     void forceOverwrite;
     const daten = datenAusListeLesen();
     speichernLokal(daten);
-    const queued = queueChangeOps(daten);
-    syncState.dirty = queued || loadSyncMeta().pendingOps.length > 0;
+    const queued = aenderungenEinstellen(daten);
+    syncState.dirty = queued || syncMetaLaden().pendingOps.length > 0;
     clearTimeout(_speichernSyncTimer);
-    _speichernSyncTimer = setTimeout(() => void syncRemoteIfNeeded(), 300);
+    _speichernSyncTimer = setTimeout(() => void syncWennNoetig(), 300);
 }
 
 async function laden() {
     const lokaleDaten = await ladenLokal();
 
     if (!supabaseClient) {
-        setSyncStatus("Sync: Lokal", "offline");
-        updateSyncDebug();
-        writeSnapshotToUi(lokaleDaten);
+        syncStatusSetzen("Sync: Lokal", "offline");
+        syncDebugAktualisieren();
+        snapshotInUiSchreiben(lokaleDaten);
         return;
     }
 
     try {
-        const meta = loadSyncMeta();
+        const meta = syncMetaLaden();
         if (!meta.snapshot.length && lokaleDaten.length > 0) {
             const localSnapshot = normalizeSnapshotData(lokaleDaten);
             meta.snapshot = localSnapshot;
             if (meta.pendingOps.length === 0) {
                 for (const item of localSnapshot) {
                     meta.pendingOps.push({
-                        opId: nextOpId(meta),
+                        opId: naechsteOpId(meta),
                         opType: "upsert",
                         itemId: item.itemId,
                         text: item.text,
@@ -1254,22 +1254,22 @@ async function laden() {
                     });
                 }
             }
-            saveSyncMeta(meta);
+            syncMetaSpeichern(meta);
         }
 
-        writeSnapshotToUi(meta.snapshot.length ? meta.snapshot : lokaleDaten);
-        await syncRemoteIfNeeded();
-        syncState.dirty = loadSyncMeta().pendingOps.length > 0;
-        setSyncStatus("Sync: Verbunden", "ok");
-        lastSyncAt = formatTimeIso(new Date());
-        updateSyncDebug();
+        snapshotInUiSchreiben(meta.snapshot.length ? meta.snapshot : lokaleDaten);
+        await syncWennNoetig();
+        syncState.dirty = syncMetaLaden().pendingOps.length > 0;
+        syncStatusSetzen("Sync: Verbunden", "ok");
+        lastSyncAt = zeitFormatieren(new Date());
+        syncDebugAktualisieren();
     } catch (err) {
-        console.warn("Remote-Laden fehlgeschlagen, nutze lokale Daten:", err, formatSupabaseError(err));
-        setSyncStatus("Sync: Offline (lokal)", "offline");
-        setInputErrorStatus(getSyncErrorHint(err));
-        updateSyncDebug();
-        writeSnapshotToUi(lokaleDaten);
-        syncState.dirty = loadSyncMeta().pendingOps.length > 0;
+        console.warn("Remote-Laden fehlgeschlagen, nutze lokale Daten:", err, fehlerFormatieren(err));
+        syncStatusSetzen("Sync: Offline (lokal)", "offline");
+        eingabeFehlerSetzen(syncFehlerHinweis(err));
+        syncDebugAktualisieren();
+        snapshotInUiSchreiben(lokaleDaten);
+        syncState.dirty = syncMetaLaden().pendingOps.length > 0;
     }
 }
 
@@ -1311,7 +1311,7 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId(), _batc
         openBtn.textContent = "Foto öffnen";
         openBtn.onclick = event => {
             event.stopPropagation();
-            openImageViewer(imageSrc);
+            bildViewerOeffnen(imageSrc);
         };
 
         const captionBtn = document.createElement("button");
@@ -1327,7 +1327,7 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId(), _batc
             event.stopPropagation();
             li.remove();
             speichern(true);
-            setMicStatus("Foto gelöscht.");
+            mikStatusSetzen("Foto gelöscht.");
         };
 
         const captionText = document.createElement("div");
@@ -1350,12 +1350,12 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId(), _batc
             const result = window.prompt("Bildbeschreibung (optional):", current);
             if (result === null) return;
             applyPhotoCaption(result, true);
-            setMicStatus(result.trim() ? "Bildbeschreibung gespeichert." : "Bildbeschreibung entfernt.");
+            mikStatusSetzen(result.trim() ? "Bildbeschreibung gespeichert." : "Bildbeschreibung entfernt.");
         };
 
         thumb.onclick = event => {
             event.stopPropagation();
-            openImageViewer(imageSrc);
+            bildViewerOeffnen(imageSrc);
         };
 
         actions.appendChild(openBtn);
@@ -1379,7 +1379,7 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId(), _batc
         if (modus !== MODUS_EINKAUFEN) return;
 
         li.classList.toggle("erledigt");
-        if (sortListByStoreGroups()) speichern();
+        if (listeNachGruppenSortieren()) speichern();
         else speichern();
     };
 
@@ -1430,10 +1430,10 @@ function mehrzeilenSpeichern() {
         .filter(Boolean)
         .forEach(item => eintragAnlegen(item));
 
-    if (modus === MODUS_EINKAUFEN) sortListByStoreGroups();
+    if (modus === MODUS_EINKAUFEN) listeNachGruppenSortieren();
     speichern();
     multiInput.value = "";
-    autoResize();
+    eingabeGroessenpassen();
     multiInput.blur();
 
     if (isListening) {
@@ -1445,15 +1445,15 @@ function mehrzeilenSpeichern() {
         restartMicAfterManualCommit = true;
         clearTimeout(micSessionTimer);
         recognition.stop();
-        setMicStatus("Eintrag gespeichert, Mikro wird neu gestartet...");
+        mikStatusSetzen("Eintrag gespeichert, Mikro wird neu gestartet...");
     }
 }
 
 multiAdd.onclick = mehrzeilenSpeichern;
 
-function clearInputBuffer(stopDictation = false) {
+function eingabeLeeren(stopDictation = false) {
     multiInput.value = "";
-    autoResize();
+    eingabeGroessenpassen();
 
     finalTranscript = "";
     latestTranscript = "";
@@ -1464,55 +1464,55 @@ function clearInputBuffer(stopDictation = false) {
         restartMicAfterManualCommit = false;
         clearTimeout(micSessionTimer);
         recognition.stop();
-        setMicStatus("Eingabe geloescht.");
+        mikStatusSetzen("Eingabe geloescht.");
         return;
     }
 
-    if (isListening) setMicStatus("Eingabe geloescht. Bitte weiter sprechen...");
-    else setMicStatus("Eingabe geloescht.");
+    if (isListening) mikStatusSetzen("Eingabe geloescht. Bitte weiter sprechen...");
+    else mikStatusSetzen("Eingabe geloescht.");
 }
 
-function openImageViewer(src) {
+function bildViewerOeffnen(src) {
     if (!imageViewer || !imageViewerImg) return;
     imageViewerImg.src = src;
     imageViewer.hidden = false;
 }
 
-function closeImageViewer() {
+function bildViewerSchliessen() {
     if (!imageViewer || !imageViewerImg) return;
     imageViewer.hidden = true;
     imageViewerImg.src = "";
 }
 
-function openHelpViewer() {
+function hilfeViewerOeffnen() {
     if (!helpViewer) return;
     helpViewer.hidden = false;
 }
 
-function closeHelpViewer() {
+function hilfeViewerSchliessen() {
     if (!helpViewer) return;
     helpViewer.hidden = true;
 }
 
-async function addPhotoAsListItem(file) {
+async function fotoHinzufuegen(file) {
     if (!file) return;
     if (btnPhotoOcr) btnPhotoOcr.disabled = true;
-    setMicStatus("Foto wird geladen...");
+    mikStatusSetzen("Foto wird geladen...");
 
     try {
-        const imageSrc = await readFileAsDataUrl(file);
-        const optimizedImageSrc = await optimizePhotoDataUrl(imageSrc);
+        const imageSrc = await dateiAlsDataUrlLesen(file);
+        const optimizedImageSrc = await fotoOptimieren(imageSrc);
         eintragAnlegen(buildPhotoEntryText(optimizedImageSrc));
-        if (modus === MODUS_EINKAUFEN) sortListByStoreGroups();
+        if (modus === MODUS_EINKAUFEN) listeNachGruppenSortieren();
         speichern();
         if (multiInput?.value?.trim()) {
-            setMicStatus("Foto gespeichert. Text bleibt im Feld und kann mit Übernehmen gespeichert werden.");
+            mikStatusSetzen("Foto gespeichert. Text bleibt im Feld und kann mit Übernehmen gespeichert werden.");
         } else {
-            setMicStatus("Foto zur Liste hinzugefügt.");
+            mikStatusSetzen("Foto zur Liste hinzugefügt.");
         }
     } catch (err) {
         console.warn("Foto konnte nicht hinzugefuegt werden:", err);
-        setMicStatus("Foto konnte nicht gelesen werden.");
+        mikStatusSetzen("Foto konnte nicht gelesen werden.");
     } finally {
         if (btnPhotoOcr) btnPhotoOcr.disabled = false;
         if (photoOcrInput) {
@@ -1524,7 +1524,7 @@ async function addPhotoAsListItem(file) {
     }
 }
 
-function readFileAsDataUrl(file) {
+function dateiAlsDataUrlLesen(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(String(reader.result || ""));
@@ -1533,7 +1533,7 @@ function readFileAsDataUrl(file) {
     });
 }
 
-async function optimizePhotoDataUrl(dataUrl) {
+async function fotoOptimieren(dataUrl) {
     if (!String(dataUrl || "").startsWith("data:image/")) return dataUrl;
 
     try {
@@ -1565,7 +1565,7 @@ async function optimizePhotoDataUrl(dataUrl) {
 
 if (btnClearInput) {
     btnClearInput.onclick = () => {
-        clearInputBuffer(false);
+        eingabeLeeren(false);
     };
 }
 
@@ -1573,30 +1573,30 @@ if (btnPhotoOcr && photoOcrInput) {
     btnPhotoOcr.onclick = () => photoOcrInput.click();
     photoOcrInput.onchange = () => {
         const file = photoOcrInput.files?.[0];
-        void addPhotoAsListItem(file);
+        void fotoHinzufuegen(file);
     };
 }
 
-if (btnImageViewerClose) btnImageViewerClose.onclick = closeImageViewer;
+if (btnImageViewerClose) btnImageViewerClose.onclick = bildViewerSchliessen;
 if (imageViewer) {
     imageViewer.onclick = event => {
-        if (event.target === imageViewer) closeImageViewer();
+        if (event.target === imageViewer) bildViewerSchliessen();
     };
 }
-if (btnHelpViewerClose) btnHelpViewerClose.onclick = closeHelpViewer;
+if (btnHelpViewerClose) btnHelpViewerClose.onclick = hilfeViewerSchliessen;
 if (helpViewer) {
     helpViewer.onclick = event => {
-        if (event.target === helpViewer) closeHelpViewer();
+        if (event.target === helpViewer) hilfeViewerSchliessen();
     };
 }
 
 btnNewLine.onclick = () => {
     multiInput.value += "\n";
-    autoResize();
+    eingabeGroessenpassen();
     multiInput.blur();
 };
 
-multiInput.addEventListener("input", autoResize);
+multiInput.addEventListener("input", eingabeGroessenpassen);
 multiInput.addEventListener("keydown", event => {
     if (event.key !== "Enter" || event.isComposing) return;
 
@@ -1607,39 +1607,39 @@ multiInput.addEventListener("keydown", event => {
     multiInput.value = text.slice(0, start) + "\n" + text.slice(end);
     const nextPos = start + 1;
     multiInput.setSelectionRange(nextPos, nextPos);
-    autoResize();
+    eingabeGroessenpassen();
 });
 
-function autoResize() {
+function eingabeGroessenpassen() {
     multiInput.style.height = "auto";
     multiInput.style.height = multiInput.scrollHeight + "px";
 }
 
-function isLocalhost() {
+function istLokalhost() {
     return location.hostname === "localhost" || location.hostname === "127.0.0.1";
 }
 
-function setMicStatus(message = "") {
+function mikStatusSetzen(message = "") {
     if (!micStatus) return;
     micStatus.textContent = message;
 }
 
-function setMicButtonState(listening) {
+function mikButtonSetzen(listening) {
     if (!btnMic) return;
     btnMic.classList.toggle("listening", listening);
     btnMic.setAttribute("aria-pressed", listening ? "true" : "false");
     btnMic.textContent = listening ? "⏹" : "🎤";
 }
 
-function setInputWithDictation(text) {
+function eingabeMitDiktat(text) {
     multiInput.value = text;
-    autoResize();
+    eingabeGroessenpassen();
     if (document.activeElement === multiInput) {
         fokusInputAmEnde();
     }
 }
 
-function initRecognition() {
+function spracherkennungInit() {
     if (!SpeechRecognitionCtor) return null;
 
     const r = new SpeechRecognitionCtor();
@@ -1655,12 +1655,12 @@ function initRecognition() {
         skipAutoSaveForCurrentBuffer = false;
         ignoreResultsUntil = 0;
         restartMicAfterManualCommit = false;
-        setMicButtonState(true);
-        setMicStatus("Spracheingabe aktiv (max. 30s)...");
+        mikButtonSetzen(true);
+        mikStatusSetzen("Spracheingabe aktiv (max. 30s)...");
         clearTimeout(micSessionTimer);
         micSessionTimer = setTimeout(() => {
             if (!isListening) return;
-            setMicStatus("Zeitlimit erreicht.");
+            mikStatusSetzen("Zeitlimit erreicht.");
             r.stop();
         }, MIC_SESSION_MS);
     };
@@ -1681,7 +1681,7 @@ function initRecognition() {
         const combined = [finalTranscript, interimTranscript].filter(Boolean).join(" ").trim();
         latestTranscript = combined;
         if (combined) skipAutoSaveForCurrentBuffer = false;
-        setInputWithDictation(combined);
+        eingabeMitDiktat(combined);
     };
 
     r.onerror = event => {
@@ -1694,22 +1694,22 @@ function initRecognition() {
             "no-speech": "Keine Sprache erkannt."
         }[event.error] || ("Spracherkennung-Fehler: " + event.error);
 
-        setMicStatus(errorText);
+        mikStatusSetzen(errorText);
     };
 
     r.onend = () => {
         clearTimeout(micSessionTimer);
         isListening = false;
-        setMicButtonState(false);
+        mikButtonSetzen(false);
         if (restartMicAfterManualCommit) {
             restartMicAfterManualCommit = false;
-            startRecognition();
+            spracherkennungStarten();
             return;
         }
 
         if (skipAutoSaveForCurrentBuffer) {
             skipAutoSaveForCurrentBuffer = false;
-            setMicStatus("Spracheingabe beendet.");
+            mikStatusSetzen("Spracheingabe beendet.");
             return;
         }
 
@@ -1718,47 +1718,47 @@ function initRecognition() {
         if (spokenText) {
             const currentValue = multiInput.value.trim();
             // Nur anhängen wenn das Feld noch nicht denselben Text enthält
-            // (setInputWithDictation befüllt es bereits während onresult)
+            // (eingabeMitDiktat befüllt es bereits während onresult)
             if (currentValue !== spokenText) {
                 multiInput.value = currentValue ? `${currentValue}\n${spokenText}` : spokenText;
             }
-            autoResize();
+            eingabeGroessenpassen();
             multiInput.focus();
             fokusInputAmEnde();
-            setMicStatus("Text erkannt. Mit Übernehmen speichern.");
+            mikStatusSetzen("Text erkannt. Mit Übernehmen speichern.");
             return;
         }
 
-        if (!micStatus?.textContent) setMicStatus("Keine Sprache erkannt.");
+        if (!micStatus?.textContent) mikStatusSetzen("Keine Sprache erkannt.");
     };
 
     return r;
 }
 
-function startRecognition() {
+function spracherkennungStarten() {
     if (!recognition) return;
-    setMicStatus("Mikrofon wird gestartet...");
+    mikStatusSetzen("Mikrofon wird gestartet...");
 
     try {
         recognition.start();
     } catch (error) {
-        setMicStatus("Start fehlgeschlagen. Bitte erneut tippen.");
+        mikStatusSetzen("Start fehlgeschlagen. Bitte erneut tippen.");
         console.warn("Speech start error:", error);
     }
 }
 
-function toggleDictation() {
+function diktatUmschalten() {
     if (!SpeechRecognitionCtor) {
-        setMicStatus("Safari unterstuetzt hier keine Spracherkennung.");
+        mikStatusSetzen("Safari unterstuetzt hier keine Spracherkennung.");
         return;
     }
 
-    if (!window.isSecureContext && !isLocalhost()) {
-        setMicStatus("Spracheingabe braucht HTTPS.");
+    if (!window.isSecureContext && !istLokalhost()) {
+        mikStatusSetzen("Spracheingabe braucht HTTPS.");
         return;
     }
 
-    if (!recognition) recognition = initRecognition();
+    if (!recognition) recognition = spracherkennungInit();
     if (!recognition) return;
 
     if (isListening) {
@@ -1768,17 +1768,17 @@ function toggleDictation() {
         return;
     }
 
-    startRecognition();
+    spracherkennungStarten();
 }
 
-if (btnMic) btnMic.onclick = toggleDictation;
+if (btnMic) btnMic.onclick = diktatUmschalten;
 
 
 /* ======================
    MODUS
 ====================== */
 
-function setModus(neu) {
+function modusSetzen(neu) {
     const vorher = modus;
     modus = neu;
 
@@ -1790,18 +1790,18 @@ function setModus(neu) {
     if (authBar) authBar.hidden = !(modus === MODUS_ERFASSEN && syncEditMode);
 
     if (vorher !== MODUS_EINKAUFEN && neu === MODUS_EINKAUFEN) {
-        if (sortListByStoreGroups()) speichern();
+        if (listeNachGruppenSortieren()) speichern();
     }
 
     if (vorher === MODUS_EINKAUFEN && neu === MODUS_ERFASSEN) {
         liste.querySelectorAll("li.erledigt").forEach(li => li.remove());
-        sortListByCaptureTextFirst();
+        listeNachErfassungSortieren();
         speichern(true);
     }
 }
 
-btnErfassen.onclick  = () => setModus(MODUS_ERFASSEN);
-btnEinkaufen.onclick = () => setModus(MODUS_EINKAUFEN);
+btnErfassen.onclick  = () => modusSetzen(MODUS_ERFASSEN);
+btnEinkaufen.onclick = () => modusSetzen(MODUS_EINKAUFEN);
 
 
 /* ======================
@@ -1862,17 +1862,17 @@ btnExport.onclick = async () => {
    INIT
 ====================== */
 
-setModus(MODUS_ERFASSEN);
+modusSetzen(MODUS_ERFASSEN);
 if (versionBadge) versionBadge.textContent = "v" + APP_VERSION;
-updateSyncDebug();
+syncDebugAktualisieren();
 
 if (btnMic && !SpeechRecognitionCtor) {
     btnMic.disabled = true;
     btnMic.title = "Spracherkennung wird hier nicht unterstuetzt";
-    setMicStatus("Spracherkennung wird in diesem Browser nicht unterstuetzt.");
+    mikStatusSetzen("Spracherkennung wird in diesem Browser nicht unterstuetzt.");
 }
 
-setupSyncCodeUi();
+syncCodeUiEinrichten();
 
 // ?code=XXXX in der URL → automatisch verbinden (z.B. aus geteiltem Link)
 const _urlCode = new URLSearchParams(location.search).get("code");
@@ -1881,23 +1881,23 @@ if (_urlCode) {
     _cleanUrl.searchParams.delete("code");
     _cleanUrl.searchParams.delete("u");
     history.replaceState(null, "", _cleanUrl.toString());
-    void applySyncCode(_urlCode, true, { allowOccupied: true, userInitiated: true });
+    void syncCodeAnwenden(_urlCode, true, { allowOccupied: true, userInitiated: true });
 }
 
-if (btnForceUpdate) btnForceUpdate.onclick = () => void forceAppUpdate();
-setupAutoUpdateChecks();
+if (btnForceUpdate) btnForceUpdate.onclick = () => void updateErzwingen();
+autoUpdateEinrichten();
 
 if (supabaseClient) {
-    startBackgroundSync();
+    hintergrundSyncStarten();
     void laden().catch(err => {
         console.warn("Initiales Laden fehlgeschlagen:", err);
-        setSyncStatus("Ladefehler – App neu laden", "offline");
+        syncStatusSetzen("Ladefehler – App neu laden", "offline");
     });
 } else {
-    setSyncStatus("Sync: Lokal", "offline");
-    updateSyncDebug();
+    syncStatusSetzen("Sync: Lokal", "offline");
+    syncDebugAktualisieren();
     void ladenLokal().then(daten => {
         datenInListeSchreiben(daten);
-        applyModeSortAfterLoad();
+        modusSortierungAnwenden();
     }).catch(err => console.warn("Lokales Laden fehlgeschlagen:", err));
 }
