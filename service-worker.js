@@ -1,10 +1,11 @@
-const CACHE_VERSION = "v1.0.109";
+const CACHE_VERSION = "v1.0.110";
 const CACHE_NAME = "einkaufsliste-" + CACHE_VERSION;
 
 const FILES_TO_CACHE = [
   "./",
   "./index.html",
   "./style.css",
+  "./utils.js",
   "./app.js",
   "./manifest.json",
   "./icon-cart-192.png",
