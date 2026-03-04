@@ -54,7 +54,7 @@ const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 const MODUS_ERFASSEN = "erfassen";
 const MODUS_EINKAUFEN = "einkaufen";
 let modus = MODUS_ERFASSEN;
-const APP_VERSION = "1.0.113";
+const APP_VERSION = "1.0.114";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -1871,4 +1871,9 @@ if (supabaseClient) {
         datenInListeSchreiben(daten);
         modusSortierungAnwenden();
     }).catch(err => console.warn("Lokales Laden fehlgeschlagen:", err));
+}
+
+// S3: SW-Registrierung hier statt Inline-Script in index.html (ermöglicht CSP ohne 'unsafe-inline')
+if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("service-worker.js?v=" + APP_VERSION, { updateViaCache: "none" });
 }
