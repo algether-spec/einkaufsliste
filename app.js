@@ -52,7 +52,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.107";
+const APP_VERSION = "1.0.108";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -629,16 +629,17 @@ function queueChangeOps(currentData) {
 }
 
 function writeSnapshotToUi(snapshotData) {
-    const normalized = normalizeSnapshotData(snapshotData)
+    // In-Memory sortieren vor DOM-Write: vermeidet doppeltes datenInListeSchreiben + DOM-Roundtrip
+    const base = normalizeSnapshotData(snapshotData)
         .sort((a, b) => a.position - b.position)
         .map((entry, index) => ({ ...entry, position: index }));
+    const sorted = modus === "einkaufen"
+        ? sortDataByStoreGroups(base)
+        : sortDataByCaptureTextFirst(base);
     applyingRemoteSnapshot = true;
     try {
-        datenInListeSchreiben(normalized);
-        applyModeSortAfterLoad();
-        const uiData = normalizeListData(datenAusListeLesen());
-        speichernLokal(uiData);
-        return uiData;
+        datenInListeSchreiben(sorted);
+        speichernLokal(sorted);
     } finally {
         applyingRemoteSnapshot = false;
     }
@@ -673,21 +674,37 @@ function isPhotoEntryText(text) {
     return String(text || "").startsWith(IMAGE_ENTRY_PREFIX);
 }
 
-function sortListByCaptureTextFirst() {
-    const daten = normalizeListData(datenAusListeLesen());
-    if (!daten.length) return false;
-
+// Reine Datensortierung (kein DOM, kein localStorage) – wiederverwendbar
+function sortDataByCaptureTextFirst(daten) {
     const offeneTexte = daten.filter(e => !e.erledigt && !isPhotoEntryText(e.text));
     const offeneFotos = daten.filter(e => !e.erledigt && isPhotoEntryText(e.text));
     const erledigte = daten.filter(e => e.erledigt);
-
-    const sortierte = [...offeneTexte, ...offeneFotos, ...erledigte].map((e, index) => ({
-        itemId: e.itemId,
-        text: e.text,
-        erledigt: e.erledigt,
-        position: index
+    return [...offeneTexte, ...offeneFotos, ...erledigte].map((e, index) => ({
+        itemId: e.itemId, text: e.text, erledigt: e.erledigt, position: index
     }));
+}
 
+function sortDataByStoreGroups(daten) {
+    const offeneTexte = [...daten.filter(e => !e.erledigt && !isPhotoEntryText(e.text))];
+    const offeneFotos = daten.filter(e => !e.erledigt && isPhotoEntryText(e.text));
+    const erledigteTexte = [...daten.filter(e => e.erledigt && !isPhotoEntryText(e.text))];
+    const erledigteFotos = daten.filter(e => e.erledigt && isPhotoEntryText(e.text));
+    const collator = new Intl.Collator("de", { sensitivity: "base" });
+    const sortFn = (a, b) => {
+        const d = getGroupIndex(a.text) - getGroupIndex(b.text);
+        return d !== 0 ? d : collator.compare(a.text, b.text);
+    };
+    offeneTexte.sort(sortFn);
+    erledigteTexte.sort(sortFn);
+    return [...offeneTexte, ...erledigteTexte, ...offeneFotos, ...erledigteFotos].map((e, index) => ({
+        itemId: e.itemId, text: e.text, erledigt: e.erledigt, position: index
+    }));
+}
+
+function sortListByCaptureTextFirst() {
+    const daten = normalizeListData(datenAusListeLesen());
+    if (!daten.length) return false;
+    const sortierte = sortDataByCaptureTextFirst(daten);
     datenInListeSchreiben(sortierte);
     speichernLokal(sortierte);
     return true;
@@ -696,32 +713,7 @@ function sortListByCaptureTextFirst() {
 function sortListByStoreGroups() {
     const daten = normalizeListData(datenAusListeLesen());
     if (!daten.length) return false;
-
-    const offeneTexte = daten.filter(e => !e.erledigt && !isPhotoEntryText(e.text));
-    const offeneFotos = daten.filter(e => !e.erledigt && isPhotoEntryText(e.text));
-    const erledigteTexte = daten.filter(e => e.erledigt && !isPhotoEntryText(e.text));
-    const erledigteFotos = daten.filter(e => e.erledigt && isPhotoEntryText(e.text));
-    const collator = new Intl.Collator("de", { sensitivity: "base" });
-
-    offeneTexte.sort((a, b) => {
-        const groupDiff = getGroupIndex(a.text) - getGroupIndex(b.text);
-        if (groupDiff !== 0) return groupDiff;
-        return collator.compare(a.text, b.text);
-    });
-
-    erledigteTexte.sort((a, b) => {
-        const groupDiff = getGroupIndex(a.text) - getGroupIndex(b.text);
-        if (groupDiff !== 0) return groupDiff;
-        return collator.compare(a.text, b.text);
-    });
-
-    const sortierte = [...offeneTexte, ...erledigteTexte, ...offeneFotos, ...erledigteFotos].map((e, index) => ({
-        itemId: e.itemId,
-        text: e.text,
-        erledigt: e.erledigt,
-        position: index
-    }));
-
+    const sortierte = sortDataByStoreGroups(daten);
     datenInListeSchreiben(sortierte);
     speichernLokal(sortierte);
     return true;
@@ -1083,8 +1075,10 @@ function datenAusListeLesen() {
 }
 
 function datenInListeSchreiben(daten) {
+    const fragment = document.createDocumentFragment();
+    daten.forEach(e => eintragAnlegen(e.text, e.erledigt, e.itemId, fragment));
     liste.innerHTML = "";
-    daten.forEach(e => eintragAnlegen(e.text, e.erledigt, e.itemId));
+    liste.appendChild(fragment);
 }
 
 function applyModeSortAfterLoad() {
@@ -1341,6 +1335,7 @@ function startBackgroundSync() {
     backgroundSyncTimer = setInterval(() => {
         if (document.hidden) return;
         if (isNetworkUnavailable()) return;
+        if (remoteRealtimeChannel) return;  // Realtime aktiv – kein Polling nötig
         void refreshFromRemoteIfChanged();
     }, BACKGROUND_SYNC_INTERVAL_MS);
 
@@ -1414,7 +1409,7 @@ async function laden() {
    EINTRÄGE
 ====================== */
 
-function eintragAnlegen(text, erledigt = false, itemId = generateItemId()) {
+function eintragAnlegen(text, erledigt = false, itemId = generateItemId(), _batchTarget = null) {
     const li = document.createElement("li");
     const rawText = String(text || "");
     li.dataset.itemId = String(itemId || "").trim() || generateItemId();
@@ -1518,6 +1513,12 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId()) {
         if (sortListByStoreGroups()) speichern();
         else speichern();
     };
+
+    // Batch-Modus (via datenInListeSchreiben): direkt in Fragment einhängen, Reihenfolge liegt beim Aufrufer
+    if (_batchTarget) {
+        _batchTarget.appendChild(li);
+        return;
+    }
 
     if (erledigt) {
         liste.appendChild(li);
