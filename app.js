@@ -26,7 +26,6 @@ const syncCodeCompact = document.getElementById("sync-code-compact");
 const btnSyncCodeDisplay = document.getElementById("btn-sync-code-display");
 const btnSyncCodeEdit = document.getElementById("btn-sync-code-edit");
 const btnSyncCodeShare = document.getElementById("btn-sync-code-share");
-const modeBadge    = document.getElementById("mode-badge");
 const versionBadge = document.getElementById("version-badge");
 const syncStatus   = document.getElementById("sync-status");
 const syncDebug    = document.getElementById("sync-debug");
@@ -54,13 +53,12 @@ const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 const MODUS_ERFASSEN = "erfassen";
 const MODUS_EINKAUFEN = "einkaufen";
 let modus = MODUS_ERFASSEN;
-const APP_VERSION = "1.0.114";
+const APP_VERSION = "1.0.115";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
 const STORAGE_KEY = "einkaufsliste";
 const SUPABASE_TABLE = "shopping_items";
-const SUPABASE_CODES_TABLE = "sync_codes";
 const SYNC_CODE_KEY = "einkaufsliste-sync-code";
 const SYNC_META_PREFIX = "einkaufsliste-sync-meta:";
 const DEVICE_ID_KEY = "einkaufsliste-device-id";
@@ -320,7 +318,8 @@ function syncEditorOeffnen() {
 function syncCodeUiEinrichten() {
     if (!authBar) return;
 
-    void syncCodeAnwenden(syncCodeLaden(), false);
+    syncCodeAnwenden(syncCodeLaden(), false)
+        .catch(err => console.warn("Initialer Sync-Code fehlgeschlagen:", err));
     syncBearbeitungsmodusSetzen(false);
 
     if (!hasSupabaseCredentials) {
@@ -797,11 +796,14 @@ function autoUpdateEinrichten() {
         void autoUpdatePruefen("interval");
     }, AUTO_UPDATE_CHECK_INTERVAL_MS);
 
-    window.addEventListener("focus", () => void autoUpdatePruefen("focus"));
-    window.addEventListener("online", () => void autoUpdatePruefen("online"));
-    document.addEventListener("visibilitychange", () => {
-        if (!document.hidden) void autoUpdatePruefen("visible");
-    });
+    if (!autoUpdateEinrichten._listenersRegistered) {
+        autoUpdateEinrichten._listenersRegistered = true;
+        window.addEventListener("focus", () => void autoUpdatePruefen("focus"));
+        window.addEventListener("online", () => void autoUpdatePruefen("online"));
+        document.addEventListener("visibilitychange", () => {
+            if (!document.hidden) void autoUpdatePruefen("visible");
+        });
+    }
 
     void autoUpdatePruefen("startup");
 }
@@ -1755,7 +1757,6 @@ function modusSetzen(neu) {
 
     btnErfassen.classList.toggle("active", modus === MODUS_ERFASSEN);
     btnEinkaufen.classList.toggle("active", modus === MODUS_EINKAUFEN);
-    if (modeBadge) modeBadge.textContent = modus === MODUS_EINKAUFEN ? "Einkaufen" : "Erfassen";
     document.body.classList.toggle("modus-einkaufen", modus === MODUS_EINKAUFEN);
     if (syncCodeCompact) syncCodeCompact.hidden = modus !== MODUS_ERFASSEN;
     if (authBar) authBar.hidden = !(modus === MODUS_ERFASSEN && syncEditMode);
@@ -1817,7 +1818,9 @@ btnExport.onclick = async () => {
         try {
             await navigator.share({ title: "Einkaufen", text });
             return;
-        } catch {}
+        } catch (err) {
+            if (err?.name === "AbortError") return;
+        }
     }
 
     if (navigator.clipboard?.writeText) {
