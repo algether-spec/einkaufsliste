@@ -52,7 +52,7 @@ const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
 let modus = "erfassen";
-const APP_VERSION = "1.0.106";
+const APP_VERSION = "1.0.107";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -1010,6 +1010,7 @@ function startRealtimeSync() {
         .subscribe(status => {
             if (status === "CHANNEL_ERROR") {
                 console.warn("Realtime-Channel Fehler, nutze Polling weiter.");
+                stopRealtimeSync();
             }
         });
 }
@@ -1048,7 +1049,6 @@ async function ensureSupabaseAuth() {
         supabaseUserId = user.id;
         supabaseReady = true;
         startRealtimeSync();
-        setInputErrorStatus("");
         setInputErrorStatus("");
         setSyncStatus("Sync: Verbunden", "ok");
         updateSyncDebug();
@@ -1265,6 +1265,9 @@ function syncRemoteIfNeeded() {
     if (syncState.pending) return syncState.lock;
     syncState.pending = true;
     syncState.lock = syncState.lock.then(async () => {
+        // pending=false JETZT: erlaubt, dass während der Ausführung ein neuer Sync eingereiht wird,
+        // damit Änderungen die während uploadPendingOps() entstehen nicht verloren gehen.
+        // Die Promise-Chain selbst garantiert sequenzielle Ausführung (kein paralleles Doppel-Upload).
         syncState.pending = false;
         setSyncStatus("Sync: Synchronisiere...", "warn");
         // In Batches leeren, damit große Offline-Queues idempotent abgearbeitet werden
@@ -1642,7 +1645,12 @@ async function addPhotoAsListItem(file) {
         setMicStatus("Foto konnte nicht gelesen werden.");
     } finally {
         if (btnPhotoOcr) btnPhotoOcr.disabled = false;
-        if (photoOcrInput) photoOcrInput.value = "";
+        if (photoOcrInput) {
+            // value="" + type-Reset: stellt sicher dass dasselbe Foto erneut gewählt werden kann (iOS-Fix)
+            photoOcrInput.value = "";
+            photoOcrInput.type = "";
+            photoOcrInput.type = "file";
+        }
     }
 }
 
