@@ -51,8 +51,10 @@ const btnImageViewerClose = document.getElementById("btn-image-viewer-close");
 const helpViewer = document.getElementById("help-viewer");
 const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 
-let modus = "erfassen";
-const APP_VERSION = "1.0.108";
+const MODUS_ERFASSEN = "erfassen";
+const MODUS_EINKAUFEN = "einkaufen";
+let modus = MODUS_ERFASSEN;
+const APP_VERSION = "1.0.109";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -346,10 +348,10 @@ async function applySyncCode(code, shouldReload = true, options = {}) {
 
 function setSyncEditMode(enabled) {
     syncEditMode = Boolean(enabled);
-    const showAuthBar = syncEditMode && modus === "erfassen";
+    const showAuthBar = syncEditMode && modus === MODUS_ERFASSEN;
     if (authBar) authBar.hidden = !showAuthBar;
-    if (syncCodeCompact) syncCodeCompact.hidden = modus !== "erfassen";
-    if (syncCodeInput && syncEditMode && modus === "erfassen") {
+    if (syncCodeCompact) syncCodeCompact.hidden = modus !== MODUS_ERFASSEN;
+    if (syncCodeInput && syncEditMode && modus === MODUS_ERFASSEN) {
         syncCodeInput.focus();
         syncCodeInput.select();
     }
@@ -633,7 +635,7 @@ function writeSnapshotToUi(snapshotData) {
     const base = normalizeSnapshotData(snapshotData)
         .sort((a, b) => a.position - b.position)
         .map((entry, index) => ({ ...entry, position: index }));
-    const sorted = modus === "einkaufen"
+    const sorted = modus === MODUS_EINKAUFEN
         ? sortDataByStoreGroups(base)
         : sortDataByCaptureTextFirst(base);
     applyingRemoteSnapshot = true;
@@ -659,15 +661,25 @@ function normalizeForGroupMatch(text) {
         .replace(/ß/g, "ss");
 }
 
+const _groupIndexCache = new Map();
 function getGroupIndex(text) {
-    if (String(text || "").startsWith(IMAGE_ENTRY_PREFIX)) return GROUP_ORDER.length + 1;
-    const normalized = normalizeForGroupMatch(text);
-    for (let i = 0; i < GROUP_ORDER.length; i += 1) {
-        const groupName = GROUP_ORDER[i];
-        const patterns = GROUP_DEFINITIONS[groupName] || [];
-        if (patterns.some(pattern => normalized.includes(pattern))) return i;
+    const key = String(text || "");
+    if (_groupIndexCache.has(key)) return _groupIndexCache.get(key);
+    let result;
+    if (key.startsWith(IMAGE_ENTRY_PREFIX)) {
+        result = GROUP_ORDER.length + 1;
+    } else {
+        const normalized = normalizeForGroupMatch(key);
+        result = GROUP_ORDER.length;
+        for (let i = 0; i < GROUP_ORDER.length; i += 1) {
+            if ((GROUP_DEFINITIONS[GROUP_ORDER[i]] || []).some(p => normalized.includes(p))) {
+                result = i;
+                break;
+            }
+        }
     }
-    return GROUP_ORDER.length;
+    _groupIndexCache.set(key, result);
+    return result;
 }
 
 function isPhotoEntryText(text) {
@@ -1082,11 +1094,11 @@ function datenInListeSchreiben(daten) {
 }
 
 function applyModeSortAfterLoad() {
-    if (modus === "einkaufen") {
+    if (modus === MODUS_EINKAUFEN) {
         sortListByStoreGroups();
         return;
     }
-    if (modus === "erfassen") {
+    if (modus === MODUS_ERFASSEN) {
         sortListByCaptureTextFirst();
     }
 }
@@ -1321,7 +1333,7 @@ function _onSyncFocus() {
     void refreshFromRemoteIfChanged();
 }
 function _onSyncOnline() {
-    void autoReconnectAndSync();
+    void autoReconnectAndSync().catch(err => console.warn("autoReconnectAndSync fehlgeschlagen:", err));
     void refreshFromRemoteIfChanged();
 }
 function _onSyncVisibilityChange() {
@@ -1507,7 +1519,7 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId(), _batc
     if (erledigt) li.classList.add("erledigt");
 
     li.onclick = () => {
-        if (modus !== "einkaufen") return;
+        if (modus !== MODUS_EINKAUFEN) return;
 
         li.classList.toggle("erledigt");
         if (sortListByStoreGroups()) speichern();
@@ -1525,7 +1537,7 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId(), _batc
         return;
     }
 
-    if (modus === "erfassen") {
+    if (modus === MODUS_ERFASSEN) {
         if (isPhotoEntryText(rawText)) {
             liste.appendChild(li);
         } else {
@@ -1561,7 +1573,7 @@ function mehrzeilenSpeichern() {
         .filter(Boolean)
         .forEach(item => eintragAnlegen(item));
 
-    if (modus === "einkaufen") sortListByStoreGroups();
+    if (modus === MODUS_EINKAUFEN) sortListByStoreGroups();
     speichern();
     multiInput.value = "";
     autoResize();
@@ -1634,7 +1646,7 @@ async function addPhotoAsListItem(file) {
         const imageSrc = await readFileAsDataUrl(file);
         const optimizedImageSrc = await optimizePhotoDataUrl(imageSrc);
         eintragAnlegen(buildPhotoEntryText(optimizedImageSrc));
-        if (modus === "einkaufen") sortListByStoreGroups();
+        if (modus === MODUS_EINKAUFEN) sortListByStoreGroups();
         speichern();
         if (multiInput?.value?.trim()) {
             setMicStatus("Foto gespeichert. Text bleibt im Feld und kann mit Übernehmen gespeichert werden.");
@@ -1913,26 +1925,26 @@ function setModus(neu) {
     const vorher = modus;
     modus = neu;
 
-    btnErfassen.classList.toggle("active", modus === "erfassen");
-    btnEinkaufen.classList.toggle("active", modus === "einkaufen");
-    if (modeBadge) modeBadge.textContent = modus === "einkaufen" ? "Einkaufen" : "Erfassen";
-    document.body.classList.toggle("modus-einkaufen", modus === "einkaufen");
-    if (syncCodeCompact) syncCodeCompact.hidden = modus !== "erfassen";
-    if (authBar) authBar.hidden = !(modus === "erfassen" && syncEditMode);
+    btnErfassen.classList.toggle("active", modus === MODUS_ERFASSEN);
+    btnEinkaufen.classList.toggle("active", modus === MODUS_EINKAUFEN);
+    if (modeBadge) modeBadge.textContent = modus === MODUS_EINKAUFEN ? "Einkaufen" : "Erfassen";
+    document.body.classList.toggle("modus-einkaufen", modus === MODUS_EINKAUFEN);
+    if (syncCodeCompact) syncCodeCompact.hidden = modus !== MODUS_ERFASSEN;
+    if (authBar) authBar.hidden = !(modus === MODUS_ERFASSEN && syncEditMode);
 
-    if (vorher !== "einkaufen" && neu === "einkaufen") {
+    if (vorher !== MODUS_EINKAUFEN && neu === MODUS_EINKAUFEN) {
         if (sortListByStoreGroups()) speichern();
     }
 
-    if (vorher === "einkaufen" && neu === "erfassen") {
+    if (vorher === MODUS_EINKAUFEN && neu === MODUS_ERFASSEN) {
         liste.querySelectorAll("li.erledigt").forEach(li => li.remove());
         sortListByCaptureTextFirst();
         speichern(true);
     }
 }
 
-btnErfassen.onclick  = () => setModus("erfassen");
-btnEinkaufen.onclick = () => setModus("einkaufen");
+btnErfassen.onclick  = () => setModus(MODUS_ERFASSEN);
+btnEinkaufen.onclick = () => setModus(MODUS_EINKAUFEN);
 
 
 /* ======================
@@ -1993,7 +2005,7 @@ btnExport.onclick = async () => {
    INIT
 ====================== */
 
-setModus("erfassen");
+setModus(MODUS_ERFASSEN);
 if (versionBadge) versionBadge.textContent = "v" + APP_VERSION;
 updateSyncDebug();
 
@@ -2020,12 +2032,15 @@ setupAutoUpdateChecks();
 
 if (supabaseClient) {
     startBackgroundSync();
-    void laden();
+    void laden().catch(err => {
+        console.warn("Initiales Laden fehlgeschlagen:", err);
+        setSyncStatus("Ladefehler – App neu laden", "offline");
+    });
 } else {
     setSyncStatus("Sync: Lokal", "offline");
     updateSyncDebug();
     void ladenLokal().then(daten => {
         datenInListeSchreiben(daten);
         applyModeSortAfterLoad();
-    });
+    }).catch(err => console.warn("Lokales Laden fehlgeschlagen:", err));
 }
