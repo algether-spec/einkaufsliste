@@ -47,6 +47,8 @@ create index if not exists sync_codes_last_used_at_idx
 create or replace function public.set_updated_at()
 returns trigger
 language plpgsql
+security definer
+set search_path = public
 as $$
 begin
   new.updated_at = now();
