@@ -54,7 +54,7 @@ const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 const MODUS_ERFASSEN = "erfassen";
 const MODUS_EINKAUFEN = "einkaufen";
 let modus = MODUS_ERFASSEN;
-const APP_VERSION = "1.0.111";
+const APP_VERSION = "1.0.112";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -748,14 +748,6 @@ function hatAktiveBearbeitung() {
     );
 }
 
-function hatUpdateRisiko() {
-    return Boolean(
-        isListening
-        || (multiInput && multiInput.value.trim().length > 0)
-        || syncState.dirty
-        || syncState.pending
-    );
-}
 
 async function hatWartendesUpdate() {
     if (!("serviceWorker" in navigator)) return false;
@@ -979,14 +971,7 @@ async function ladenLokal() {
     try {
         const parsed = JSON.parse(raw);
         if (!Array.isArray(parsed)) return [];
-        const items = parsed
-            .map((e, index) => ({
-                itemId: String(e.itemId || e.item_id || "").trim() || generateItemId(),
-                text: String(e.text || ""),
-                erledigt: Boolean(e.erledigt),
-                position: Number.isFinite(e.position) ? e.position : index
-            }))
-            .filter(e => e.text.trim().length > 0);
+        const items = normalizeListData(parsed);
 
         return await Promise.all(items.map(async item => {
             if (!item.text.startsWith(IMAGE_IDB_REF_PREFIX)) return item;
@@ -1004,29 +989,6 @@ async function ladenLokal() {
     }
 }
 
-async function remoteEintraegeLaden() {
-    if (!supabaseClient) return null;
-    if (!(await authSicherstellen())) return null;
-
-    const { data, error } = await supabaseClient
-        .from(SUPABASE_TABLE)
-        .select("item_id, text, erledigt, position, deleted_at, updated_at")
-        .eq("sync_code", currentSyncCode)
-        .order("position", { ascending: true })
-        .order("updated_at", { ascending: true });
-
-    if (error) throw error;
-    if (!Array.isArray(data)) return [];
-
-    return data.map((e, index) => ({
-        itemId: String(e.item_id || "").trim() || generateItemId(),
-        text: String(e.text || ""),
-        erledigt: Boolean(e.erledigt),
-        position: Number.isFinite(e.position) ? e.position : index,
-        deletedAt: e.deleted_at ? String(e.deleted_at) : "",
-        updatedAt: e.updated_at ? String(e.updated_at) : ""
-    }));
-}
 
 async function ausstehendHochladen() {
     const meta = syncMetaLaden();
@@ -1216,8 +1178,7 @@ function hintergrundSyncStarten() {
     document.addEventListener("visibilitychange", _onSyncVisibilityChange);
 }
 
-function speichern(forceOverwrite = false) {
-    void forceOverwrite;
+function speichern() {
     const daten = datenAusListeLesen();
     speichernLokal(daten);
     const queued = aenderungenEinstellen(daten);
@@ -1326,7 +1287,7 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId(), _batc
         deleteBtn.onclick = event => {
             event.stopPropagation();
             li.remove();
-            speichern(true);
+            speichern();
             mikStatusSetzen("Foto gelöscht.");
         };
 
@@ -1341,7 +1302,7 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId(), _batc
             captionText.textContent = photoCaption;
             captionText.hidden = !photoCaption;
             captionBtn.textContent = photoCaption ? "Text ändern" : "Text";
-            if (saveNow) speichern(true);
+            if (saveNow) speichern();
         };
 
         captionBtn.onclick = event => {
@@ -1379,8 +1340,8 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId(), _batc
         if (modus !== MODUS_EINKAUFEN) return;
 
         li.classList.toggle("erledigt");
-        if (listeNachGruppenSortieren()) speichern();
-        else speichern();
+        listeNachGruppenSortieren();
+        speichern();
     };
 
     // Batch-Modus (via datenInListeSchreiben): direkt in Fragment einhängen, Reihenfolge liegt beim Aufrufer
@@ -1796,7 +1757,7 @@ function modusSetzen(neu) {
     if (vorher === MODUS_EINKAUFEN && neu === MODUS_ERFASSEN) {
         liste.querySelectorAll("li.erledigt").forEach(li => li.remove());
         listeNachErfassungSortieren();
-        speichern(true);
+        speichern();
     }
 }
 
