@@ -63,6 +63,9 @@ const SYNC_CODE_KEY = "einkaufsliste-sync-code";
 const SYNC_META_PREFIX = "einkaufsliste-sync-meta:";
 const DEVICE_ID_KEY = "einkaufsliste-device-id";
 const SYNC_OP_BATCH_SIZE = 200;
+const MAX_REMOTE_ROWS = 10_000;
+const MAX_TEXT_LENGTH = 10_000;
+const MAX_ITEM_ID_LENGTH = 128;
 const TOMBSTONE_TEXT = "[deleted]";
 // IMAGE_ENTRY_PREFIX, IMAGE_ENTRY_CAPTION_MARKER, parsePhotoEntryText, buildPhotoEntryText → utils.js
 const IMAGE_IDB_REF_PREFIX = "__IMG_IDB__:";
@@ -143,6 +146,7 @@ let echtzeitTimer = null;
 let updatePruefTimer = null;
 let updateLaeuft = false;
 let snapshotWirdAngewendet = false;
+let _aenderungenNachSnapshotAusstehend = false;
 let _speichernSyncTimer = null;
 
 if (authBar) authBar.hidden = true;
@@ -503,7 +507,10 @@ function naechsteOpId(meta) {
 }
 
 function aenderungenEinstellen(currentData) {
-    if (snapshotWirdAngewendet) return false;
+    if (snapshotWirdAngewendet) {
+        _aenderungenNachSnapshotAusstehend = true;
+        return false;
+    }
     const meta = syncMetaLaden();
     const previous = normalizeSnapshotData(meta.snapshot);
     const current = normalizeSnapshotData(currentData);
@@ -557,12 +564,17 @@ function snapshotInUiSchreiben(snapshotData) {
     const sorted = modus === MODUS_EINKAUFEN
         ? sortDataByStoreGroups(base)
         : sortDataByCaptureTextFirst(base);
+    _aenderungenNachSnapshotAusstehend = false;
     snapshotWirdAngewendet = true;
     try {
         datenInListeSchreiben(sorted);
-        speichernLokal(sorted);
+        void speichernLokal(sorted);
     } finally {
         snapshotWirdAngewendet = false;
+        if (_aenderungenNachSnapshotAusstehend) {
+            _aenderungenNachSnapshotAusstehend = false;
+            setTimeout(speichern, 0);
+        }
     }
 }
 
@@ -574,7 +586,7 @@ function listeNachErfassungSortieren() {
     if (!daten.length) return false;
     const sortierte = sortDataByCaptureTextFirst(daten);
     datenInListeSchreiben(sortierte);
-    speichernLokal(sortierte);
+    void speichernLokal(sortierte);
     return true;
 }
 
@@ -583,7 +595,7 @@ function listeNachGruppenSortieren() {
     if (!daten.length) return false;
     const sortierte = sortDataByStoreGroups(daten);
     datenInListeSchreiben(sortierte);
-    speichernLokal(sortierte);
+    void speichernLokal(sortierte);
     return true;
 }
 
@@ -954,15 +966,20 @@ function modusSortierungAnwenden() {
     }
 }
 
-function speichernLokal(daten) {
-    const stripped = daten.map(item => {
+async function speichernLokal(daten) {
+    const stripped = await Promise.all(daten.map(async item => {
         if (!isPhotoEntryText(item.text)) return item;
         const parsed = parsePhotoEntryText(item.text);
         if (!parsed?.imageSrc?.startsWith("data:")) return item; // bereits eine IDB-Referenz
-        fotoInIdbSpeichern(item.itemId, parsed.imageSrc).catch(err => console.warn("Foto-IDB Schreibfehler:", err));
+        try {
+            await fotoInIdbSpeichern(item.itemId, parsed.imageSrc);
+        } catch (err) {
+            console.warn("Foto-IDB Schreibfehler – behalte Data-URL:", err);
+            return item; // Referenz NICHT schreiben, solange IDB-Write gescheitert ist
+        }
         const ref = IMAGE_IDB_REF_PREFIX + item.itemId + (parsed.caption ? IMAGE_ENTRY_CAPTION_MARKER + parsed.caption : "");
         return { ...item, text: ref };
-    });
+    }));
     localStorage.setItem(STORAGE_KEY, JSON.stringify(stripped));
 }
 
@@ -1068,14 +1085,19 @@ async function remoteAenderungenLaden(lastRemoteSyncAt) {
         offset += PAGE_SIZE;
     }
 
-    return alle.map((row, index) => ({
-        itemId: String(row.item_id || "").trim() || generateItemId(),
-        text: String(row.text || ""),
-        erledigt: Boolean(row.erledigt),
-        position: Number.isFinite(row.position) ? row.position : index,
-        deletedAt: row.deleted_at ? String(row.deleted_at) : "",
-        updatedAt: row.updated_at ? String(row.updated_at) : ""
-    }));
+    return alle.slice(0, MAX_REMOTE_ROWS).flatMap((row, index) => {
+        const itemId = String(row.item_id || "").trim().slice(0, MAX_ITEM_ID_LENGTH);
+        if (!itemId) return [];
+        const position = Number.isFinite(row.position) && row.position >= 0 ? row.position : index;
+        return [{
+            itemId,
+            text: String(row.text || "").slice(0, MAX_TEXT_LENGTH),
+            erledigt: Boolean(row.erledigt),
+            position,
+            deletedAt: row.deleted_at ? String(row.deleted_at) : "",
+            updatedAt: row.updated_at ? String(row.updated_at) : ""
+        }];
+    });
 }
 
 async function remoteAenderungenAnwenden(authStatusMsg) {
@@ -1192,7 +1214,7 @@ function hintergrundSyncStarten() {
 
 function speichern() {
     const daten = datenAusListeLesen();
-    speichernLokal(daten);
+    void speichernLokal(daten);
     const queued = aenderungenEinstellen(daten);
     syncState.dirty = queued || syncMetaLaden().pendingOps.length > 0;
     clearTimeout(_speichernSyncTimer);
@@ -1848,14 +1870,25 @@ if (btnMic && !SpeechRecognitionCtor) {
 
 syncCodeUiEinrichten();
 
-// ?code=XXXX in der URL → automatisch verbinden (z.B. aus geteiltem Link)
+// ?code=XXXX in der URL → verbinden (z.B. aus geteiltem Link)
 const _urlCode = new URLSearchParams(location.search).get("code");
 if (_urlCode) {
     const _cleanUrl = new URL(location.href);
     _cleanUrl.searchParams.delete("code");
     _cleanUrl.searchParams.delete("u");
     history.replaceState(null, "", _cleanUrl.toString());
-    void syncCodeAnwenden(_urlCode, true, { allowOccupied: true, userInitiated: true });
+    const _normalizedUrlCode = syncCodeNormalisieren(_urlCode);
+    if (istGueltigerSyncCode(_normalizedUrlCode)) {
+        if (!currentSyncCode || currentSyncCode === _normalizedUrlCode) {
+            // Kein bestehender Code → direkt verbinden
+            void syncCodeAnwenden(_normalizedUrlCode, true, { allowOccupied: true, userInitiated: true });
+        } else {
+            // Bestehender Code weicht ab → Nutzer muss explizit bestätigen
+            if (syncCodeInput) syncCodeInput.value = _normalizedUrlCode;
+            syncBearbeitungsmodusSetzen(true);
+            authStatusSetzen(`Geteilter Code: ${_normalizedUrlCode} – Verbinden zum Beitreten.`);
+        }
+    }
 }
 
 if (btnForceUpdate) btnForceUpdate.onclick = () => void updateErzwingen();
