@@ -4,6 +4,7 @@ const CACHE_NAME = "einkaufsliste-" + CACHE_VERSION;
 const FILES_TO_CACHE = [
   "./",
   "./index.html",
+  "./config.js",
   "./style.css",
   "./utils.js",
   "./app.js",
