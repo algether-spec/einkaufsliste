@@ -8,6 +8,7 @@
     "check:smoke": "node scripts/smoke.mjs",
     "check:sync": "node --test scripts/sync-conflict.test.mjs",
     "check:utils": "node --test scripts/utils.test.mjs",
-    "check": "npm run check:syntax && npm run check:smoke && npm run check:sync && npm run check:utils"
+    "check": "npm run check:syntax && npm run check:smoke && npm run check:sync && npm run check:utils",
+    "start": "npx --yes serve -p 8080 ."
   }
 }
