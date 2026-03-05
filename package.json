@@ -1,0 +1,13 @@
+{
+  "name": "einkaufsliste-v2",
+  "private": true,
+  "version": "1.0.115",
+  "description": "Offline-faehige Einkaufsliste als Progressive Web App",
+  "scripts": {
+    "check:syntax": "node --check app.js && node --check service-worker.js && node --check utils.js",
+    "check:smoke": "node scripts/smoke.mjs",
+    "check:sync": "node --test scripts/sync-conflict.test.mjs",
+    "check:utils": "node --test scripts/utils.test.mjs",
+    "check": "npm run check:syntax && npm run check:smoke && npm run check:sync && npm run check:utils"
+  }
+}
