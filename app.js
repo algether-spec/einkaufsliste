@@ -53,7 +53,7 @@ const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 const MODUS_ERFASSEN = "erfassen";
 const MODUS_EINKAUFEN = "einkaufen";
 let modus = MODUS_ERFASSEN;
-const APP_VERSION = "1.0.118";
+const APP_VERSION = "1.0.119";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -1427,9 +1427,9 @@ function mehrzeilenSpeichern() {
         .forEach(item => eintragAnlegen(item));
 
     if (modus === MODUS_EINKAUFEN) listeNachGruppenSortieren();
-    speichern();
     multiInput.value = "";
     eingabeGroessenpassen();
+    speichern();
     multiInput.blur();
 
     if (isListening) {
@@ -1649,7 +1649,7 @@ function spracherkennungInit() {
         finalTranscript = "";
         latestTranscript = "";
         skipAutoSaveForCurrentBuffer = false;
-        ignoreResultsUntil = 0;
+        if (Date.now() >= ignoreResultsUntil) ignoreResultsUntil = 0;
         restartMicAfterManualCommit = false;
         mikButtonSetzen(true);
         mikStatusSetzen("Spracheingabe aktiv (max. 30s)...");
