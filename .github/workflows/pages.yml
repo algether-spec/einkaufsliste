@@ -1,38 +1,54 @@
 name: Deploy to GitHub Pages
 
+# Deployt main unter: https://algether-spec.github.io/einkaufsliste/
+#
+# Nutzt JamesIves/github-pages-deploy-action statt actions/deploy-pages,
+# damit das preview/-Verzeichnis (Feature-Branch-Deployments) erhalten bleibt.
+#
+# GitHub Pages Quelle (einmalig setzen):
+#   Settings → Pages → Source: "Deploy from a branch" → Branch: gh-pages / root
+
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
-  group: pages
+  group: pages-main
   cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - name: Create config.js from secrets
+
+      - name: Deployment-Ordner vorbereiten
         run: |
-          cat > config.js <<'ENDOFFILE'
+          mkdir _deploy
+          rsync -a \
+            --exclude='.git' \
+            --exclude='_deploy' \
+            --exclude='.github' \
+            --exclude='node_modules' \
+            . _deploy/
+          cat > _deploy/config.js <<'ENDOFFILE'
           window.APP_CONFIG = {
             supabaseUrl: "${{ secrets.SUPABASE_URL }}",
             supabaseAnonKey: "${{ secrets.SUPABASE_ANON_KEY }}"
           };
           ENDOFFILE
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+
+      - name: Auf gh-pages Branch deployen
+        uses: JamesIves/github-pages-deploy-action@v4
         with:
-          path: .
-      - id: deployment
-        uses: actions/deploy-pages@v4
+          branch: gh-pages
+          folder: _deploy
+          single-commit: true
+          clean: true
+          clean-exclude: |
+            preview/
+          commit-message: "deploy: main @ ${{ github.sha }}"
