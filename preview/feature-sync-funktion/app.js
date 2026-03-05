@@ -51,7 +51,7 @@ const btnHelpViewerClose = document.getElementById("btn-help-viewer-close");
 const MODUS_ERFASSEN = "erfassen";
 const MODUS_EINKAUFEN = "einkaufen";
 let modus = MODUS_ERFASSEN;
-const APP_VERSION = "1.0.116";
+const APP_VERSION = "1.0.117";
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 const APP_CONFIG = window.APP_CONFIG || {};
@@ -366,8 +366,12 @@ function syncCodeUiEinrichten() {
         };
     }
 
-    if (btnSyncCodeDisplay) {
-        btnSyncCodeDisplay.onclick = () => syncEditorOeffnen();
+    const btnSyncConnect = document.getElementById("btn-sync-connect");
+    if (btnSyncConnect) {
+        btnSyncConnect.onclick = () => {
+            if (syncCodeInput) syncCodeInput.value = "";
+            syncBearbeitungsmodusSetzen(true);
+        };
     }
 
     if (btnSyncCodeShare) {
