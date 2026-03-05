@@ -319,9 +319,9 @@ function syncEditorOeffnen() {
 }
 
 function syncCodeUiEinrichten() {
-    if (!authBar) return;
+    if (!authBar) return Promise.resolve();
 
-    syncCodeAnwenden(syncCodeLaden(), false)
+    const initPromise = syncCodeAnwenden(syncCodeLaden(), false)
         .catch(err => console.warn("Initialer Sync-Code fehlgeschlagen:", err));
     syncBearbeitungsmodusSetzen(false);
 
@@ -369,7 +369,7 @@ function syncCodeUiEinrichten() {
     const btnSyncConnect = document.getElementById("btn-sync-connect");
     if (btnSyncConnect) {
         btnSyncConnect.onclick = () => {
-            if (syncCodeInput) syncCodeInput.value = "";
+            if (syncCodeInput) syncCodeInput.value = currentSyncCode || "";
             syncBearbeitungsmodusSetzen(true);
         };
     }
@@ -377,6 +377,8 @@ function syncCodeUiEinrichten() {
     if (btnSyncCodeShare) {
         btnSyncCodeShare.onclick = () => void syncCodeTeilen();
     }
+
+    return initPromise;
 }
 
 async function syncCodeTeilen() {
@@ -1875,13 +1877,16 @@ if (_rawUrlCode) {
     history.replaceState(null, "", _cleanUrl.toString());
 }
 
-syncCodeUiEinrichten();
+const _initPromise = syncCodeUiEinrichten();
 
 // Bestehender Code weicht vom URL-Code ab → Editor zeigen, Nutzer bestätigt
+// Nach dem async warten, damit syncCodeAnwenden den Input nicht überschreibt.
 if (_urlCodeGueltig && _hatVorherigenCode && _preExistingCode !== _normalizedUrlCode) {
-    if (syncCodeInput) syncCodeInput.value = _normalizedUrlCode;
-    syncBearbeitungsmodusSetzen(true);
-    authStatusSetzen(`Geteilter Code: ${_normalizedUrlCode} – Verbinden zum Beitreten.`);
+    Promise.resolve(_initPromise).then(() => {
+        if (syncCodeInput) syncCodeInput.value = _normalizedUrlCode;
+        syncBearbeitungsmodusSetzen(true);
+        authStatusSetzen(`Geteilter Code: ${_normalizedUrlCode} – Verbinden zum Beitreten.`);
+    });
 }
 
 if (btnForceUpdate) btnForceUpdate.onclick = () => void updateErzwingen();
