@@ -24,7 +24,6 @@ const btnExport    = document.getElementById("btnExport");
 const btnForceUpdate = document.getElementById("btn-force-update");
 const syncCodeCompact = document.getElementById("sync-code-compact");
 const btnSyncCodeDisplay = document.getElementById("btn-sync-code-display");
-const btnSyncCodeEdit = document.getElementById("btn-sync-code-edit");
 const btnSyncCodeShare = document.getElementById("btn-sync-code-share");
 const versionBadge = document.getElementById("version-badge");
 const syncStatus   = document.getElementById("sync-status");
@@ -32,7 +31,6 @@ const syncDebug    = document.getElementById("sync-debug");
 const authBar      = document.getElementById("auth-bar");
 const syncCodeInput = document.getElementById("sync-code");
 const btnSyncApply  = document.getElementById("btn-sync-apply");
-const btnSyncNew    = document.getElementById("btn-sync-new");
 const authStatus   = document.getElementById("auth-status");
 
 const multiInput = document.getElementById("multi-line-input");
@@ -354,7 +352,6 @@ function syncCodeUiEinrichten() {
 
     function syncButtonsDeaktivieren(disabled) {
         if (btnSyncApply) btnSyncApply.disabled = disabled;
-        if (btnSyncNew) btnSyncNew.disabled = disabled;
     }
 
     if (btnSyncApply) {
@@ -367,23 +364,6 @@ function syncCodeUiEinrichten() {
                 syncButtonsDeaktivieren(false);
             }
         };
-    }
-
-    if (btnSyncNew) {
-        btnSyncNew.onclick = async () => {
-            syncButtonsDeaktivieren(true);
-            authStatusSetzen("Neuer Code wird erstellt...");
-            try {
-                const newCode = await verfuegbarenSyncCodeErzeugen();
-                await syncCodeAnwenden(newCode, true, { allowOccupied: false, userInitiated: true });
-            } finally {
-                syncButtonsDeaktivieren(false);
-            }
-        };
-    }
-
-    if (btnSyncCodeEdit) {
-        btnSyncCodeEdit.onclick = () => syncBearbeitungsmodusSetzen(!syncEditMode);
     }
 
     if (btnSyncCodeDisplay) {
