@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v1.0.122";
+const CACHE_VERSION = "v1.0.123";
 const CACHE_NAME = "einkaufsliste-" + CACHE_VERSION;
 
 const FILES_TO_CACHE = [
@@ -7,6 +7,7 @@ const FILES_TO_CACHE = [
   "./config.js",
   "./style.css",
   "./utils.js",
+  "./supabase-lib.js",
   "./supabase.js",
   "./sync.js",
   "./ui.js",
