@@ -165,6 +165,175 @@ function sortDataByStoreGroups(daten) {
     }));
 }
 
+/* --- Netzwerk / Browser-Helpers ---------------------------------- */
+
+function keinNetzwerk() {
+    return typeof navigator !== "undefined" && navigator.onLine === false;
+}
+
+function istLokalhost() {
+    return typeof location !== "undefined"
+        && (location.hostname === "localhost" || location.hostname === "127.0.0.1");
+}
+
+function seitenNeuladen() {
+    const url = new URL(location.href);
+    url.searchParams.set("u", String(Date.now()));
+    location.replace(url.toString());
+}
+
+function geraeteIdLaden() {
+    const existing = String(localStorage.getItem(DEVICE_ID_KEY) || "").trim();
+    if (existing) return existing;
+    const created = window.crypto?.randomUUID
+        ? window.crypto.randomUUID()
+        : `device-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    localStorage.setItem(DEVICE_ID_KEY, created);
+    return created;
+}
+
+/* --- Fehler / Formatierung --------------------------------------- */
+
+function kurzeId(id) {
+    if (!id) return "-";
+    if (id.length <= 12) return id;
+    return id.slice(0, 8) + "..." + id.slice(-4);
+}
+
+function zeitFormatieren(date) {
+    return date.toISOString().replace("T", " ").slice(0, 19) + "Z";
+}
+
+function fehlerFormatieren(err) {
+    const code = String(err?.code || "").trim();
+    const message = String(err?.message || "").trim();
+    const details = String(err?.details || "").trim();
+    const hint = String(err?.hint || "").trim();
+    return [code, message, details, hint].filter(Boolean).join(" | ");
+}
+
+function syncFehlerHinweis(err) {
+    const raw = fehlerFormatieren(err);
+    const message = raw.toLowerCase();
+    if (!message) return "Bitte Verbindung und Supabase-Einstellungen pruefen.";
+    if (message.includes("json parse error") && message.includes("unrecognized token '<'")) {
+        return "Cloud-Sync derzeit nicht erreichbar (Netz/CDN). Lokal wird weiter gespeichert.";
+    }
+    if (message.includes("column shopping_items.deleted_at does not exist")) {
+        return "DB-Migration fehlt: Bitte supabase/schema.sql im Supabase SQL Editor ausfuehren.";
+    }
+    if (message.includes("function public.apply_shopping_ops") && message.includes("does not exist")) {
+        return "DB-Migration fehlt: RPC apply_shopping_ops wurde noch nicht angelegt.";
+    }
+    if (message.includes("permission denied") || message.includes("not allowed")) {
+        return "Supabase Rechte fehlen (schema.sql erneut ausfuehren).";
+    }
+    if (message.includes("jwt") || message.includes("auth")) {
+        return "Anmeldung fehlgeschlagen. Bitte Seite neu laden.";
+    }
+    if (message.includes("sync_code_already_exists")) {
+        return "Code ist bereits belegt. Bitte anderen Code nutzen.";
+    }
+    if (message.includes("sync_code_format_invalid")) {
+        return "Bitte Code im Format AAAA1234 eingeben.";
+    }
+    if (message.includes("sync_code_reserved")) {
+        return "Code HELP0000 ist reserviert.";
+    }
+    if (message.includes("failed to fetch") || message.includes("network")) {
+        return "Netzwerkfehler. Internetverbindung pruefen.";
+    }
+    return "Sync-Fehler: " + raw.slice(0, 120);
+}
+
+/* --- Sync-Meta Hilfe --------------------------------------------- */
+
+function leereSyncMetaErstellen() {
+    return {
+        opSeq: 0,
+        pendingOps: [],
+        snapshot: [],
+        lastRemoteSyncAt: ""
+    };
+}
+
+/* --- IndexedDB Foto-Store --------------------------------------- */
+
+let _photoDb = null;
+
+function fotoDatenbankOeffnen() {
+    if (_photoDb) return Promise.resolve(_photoDb);
+    return new Promise((resolve, reject) => {
+        const req = indexedDB.open(PHOTO_IDB_NAME, 1);
+        req.onupgradeneeded = e => e.target.result.createObjectStore(PHOTO_IDB_STORE);
+        req.onsuccess = e => { _photoDb = e.target.result; resolve(_photoDb); };
+        req.onerror = () => reject(req.error);
+    });
+}
+
+function fotoInIdbSpeichern(itemId, dataUrl) {
+    return fotoDatenbankOeffnen().then(db => new Promise((resolve, reject) => {
+        const tx = db.transaction(PHOTO_IDB_STORE, "readwrite");
+        tx.objectStore(PHOTO_IDB_STORE).put(dataUrl, itemId);
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+    }));
+}
+
+function fotoAusIdbLaden(itemId) {
+    return fotoDatenbankOeffnen().then(db => new Promise(resolve => {
+        const tx = db.transaction(PHOTO_IDB_STORE, "readonly");
+        const req = tx.objectStore(PHOTO_IDB_STORE).get(itemId);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => resolve(null);
+    }));
+}
+
+/* --- Lokales Speichern & Laden ----------------------------------- */
+
+async function speichernLokal(daten) {
+    const stripped = await Promise.all(daten.map(async item => {
+        if (!isPhotoEntryText(item.text)) return item;
+        const parsed = parsePhotoEntryText(item.text);
+        if (!parsed?.imageSrc?.startsWith("data:")) return item;
+        try {
+            await fotoInIdbSpeichern(item.itemId, parsed.imageSrc);
+        } catch (err) {
+            console.warn("Foto-IDB Schreibfehler – behalte Data-URL:", err);
+            return item;
+        }
+        const ref = IMAGE_IDB_REF_PREFIX + item.itemId
+            + (parsed.caption ? IMAGE_ENTRY_CAPTION_MARKER + parsed.caption : "");
+        return { ...item, text: ref };
+    }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(stripped));
+}
+
+async function ladenLokal() {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+
+    try {
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        const items = normalizeListData(parsed);
+
+        return await Promise.all(items.map(async item => {
+            if (!item.text.startsWith(IMAGE_IDB_REF_PREFIX)) return item;
+            const withoutPrefix = item.text.slice(IMAGE_IDB_REF_PREFIX.length);
+            const markerIndex = withoutPrefix.indexOf(IMAGE_ENTRY_CAPTION_MARKER);
+            const refId = markerIndex === -1 ? withoutPrefix : withoutPrefix.slice(0, markerIndex);
+            const caption = markerIndex === -1 ? "" : withoutPrefix.slice(markerIndex + IMAGE_ENTRY_CAPTION_MARKER.length);
+            const dataUrl = await fotoAusIdbLaden(refId || item.itemId);
+            if (dataUrl) return { ...item, text: buildPhotoEntryText(dataUrl, caption) };
+            return item;
+        }));
+    } catch (err) {
+        console.warn("Fehler beim lokalen Laden:", err);
+        return [];
+    }
+}
+
 /* --- Node.js-Export für Tests ------------------------------------ */
 
 if (typeof module !== "undefined") {
