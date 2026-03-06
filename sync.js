@@ -92,6 +92,29 @@ async function syncCodeAnwenden(code, shouldReload = true, options = {}) {
         return;
     }
 
+    // Beim initialen Laden: Code sofort lokal setzen – sichtbar auch ohne Netz/Supabase
+    if (!userInitiated) {
+        currentSyncCode = normalized;
+        localStorage.setItem(SYNC_CODE_KEY, currentSyncCode);
+        if (btnSyncCodeDisplay) btnSyncCodeDisplay.textContent = currentSyncCode;
+        if (syncCodeInput) syncCodeInput.value = currentSyncCode;
+        syncDebugAktualisieren();
+    }
+
+    // Ohne Supabase-Client: nur lokal speichern, kein Netzwerk-Fehler anzeigen
+    if (!supabaseClient) {
+        eingabeFehlerSetzen("");
+        if (userInitiated) {
+            currentSyncCode = normalized;
+            localStorage.setItem(SYNC_CODE_KEY, currentSyncCode);
+            if (btnSyncCodeDisplay) btnSyncCodeDisplay.textContent = currentSyncCode;
+            authStatusSetzen("Sync nicht verfuegbar. Code lokal gespeichert.");
+            syncBearbeitungsmodusSetzen(false);
+            syncDebugAktualisieren();
+        }
+        return;
+    }
+
     try {
         await syncCodeRpcVerwenden(normalized, {
             allowCreate: true,
