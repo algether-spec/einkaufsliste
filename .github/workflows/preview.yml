@@ -36,12 +36,8 @@ jobs:
             --exclude='.github' \
             --exclude='node_modules' \
             . _deploy/
-          cat > _deploy/config.js <<'ENDOFFILE'
-          window.APP_CONFIG = {
-            supabaseUrl: "${{ secrets.SUPABASE_URL }}",
-            supabaseAnonKey: "${{ secrets.SUPABASE_ANON_KEY }}"
-          };
-          ENDOFFILE
+          sed -i "s|supabaseUrl: \"[^\"]*\"|supabaseUrl: \"${{ secrets.SUPABASE_URL }}\"|" _deploy/config.js
+          sed -i "s|supabaseAnonKey: \"[^\"]*\"|supabaseAnonKey: \"${{ secrets.SUPABASE_ANON_KEY }}\"|" _deploy/config.js
 
       - name: Preview auf gh-pages Branch deployen
         uses: JamesIves/github-pages-deploy-action@v4
