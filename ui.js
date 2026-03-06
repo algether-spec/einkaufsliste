@@ -563,14 +563,18 @@ function spracherkennungInit() {
 
     r.onerror = event => {
         clearTimeout(micSessionTimer);
+        // Zustand zurücksetzen – sonst glaubt die App das Mikro läuft noch
+        isListening = false;
+        mikButtonSetzen(false);
+        // Recognition-Objekt verwerfen: bei Folge-Tap wird ein frisches erstellt
+        recognition = null;
         const errorText = {
-            "not-allowed": "Mikrofon wurde nicht erlaubt.",
-            "service-not-allowed": "Spracherkennung ist in Safari blockiert.",
+            "not-allowed": "Mikrofon nicht erlaubt – bitte in Einstellungen erlauben.",
+            "service-not-allowed": "Spracherkennung blockiert – bitte in Einstellungen erlauben.",
             "audio-capture": "Kein Mikrofon verfuegbar.",
             "network": "Netzwerkfehler bei Spracherkennung.",
             "no-speech": "Keine Sprache erkannt."
         }[event.error] || ("Spracherkennung-Fehler: " + event.error);
-
         mikStatusSetzen(errorText);
     };
 
@@ -617,20 +621,30 @@ function spracherkennungStarten() {
     try {
         recognition.start();
     } catch (error) {
-        mikStatusSetzen("Start fehlgeschlagen. Bitte erneut tippen.");
         console.warn("Speech start error:", error);
+        // Objekt könnte in kaputtem Zustand sein – verwerfen damit nächster Tap funktioniert
+        isListening = false;
+        mikButtonSetzen(false);
+        recognition = null;
+        mikStatusSetzen("Mikrofon nicht bereit. Bitte erneut tippen.");
     }
 }
 
 function diktatUmschalten() {
     if (!SpeechRecognitionCtor) {
-        mikStatusSetzen("Safari unterstuetzt hier keine Spracherkennung.");
+        mikStatusSetzen("Spracherkennung wird hier nicht unterstuetzt.");
         return;
     }
 
     if (!window.isSecureContext && !istLokalhost()) {
         mikStatusSetzen("Spracheingabe braucht HTTPS.");
         return;
+    }
+
+    // Inkonsistenter Zustand (recognition null aber isListening true) → zurücksetzen
+    if (!recognition && isListening) {
+        isListening = false;
+        mikButtonSetzen(false);
     }
 
     if (!recognition) recognition = spracherkennungInit();
