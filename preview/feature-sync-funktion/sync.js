@@ -123,16 +123,25 @@ async function syncCodeAnwenden(code, shouldReload = true, options = {}) {
     } catch (err) {
         console.warn("Code-Verbinden fehlgeschlagen:", err);
         const hint = syncFehlerHinweis(err);
-        if (String(fehlerFormatieren(err)).includes("SYNC_CODE_ALREADY_EXISTS")) {
+        const istBelegt = String(fehlerFormatieren(err)).includes("SYNC_CODE_ALREADY_EXISTS");
+
+        if (istBelegt) {
+            // Code-Konflikt: nicht speichern, Nutzer muss anderen Code wählen
             authStatusSetzen("Code ist bereits belegt. Bitte anderen Code nutzen.");
+            if (userInitiated && syncCodeInput) {
+                syncBearbeitungsmodusSetzen(true);
+                syncCodeInput.value = currentSyncCode || normalized || "";
+                syncCodeInput.focus();
+                syncCodeInput.select();
+            }
         } else {
+            // Netzwerk-/Auth-Fehler: Code lokal speichern damit er nach PWA-Neustart erhalten bleibt
+            currentSyncCode = normalized;
+            localStorage.setItem(SYNC_CODE_KEY, currentSyncCode);
+            if (btnSyncCodeDisplay) btnSyncCodeDisplay.textContent = currentSyncCode;
             authStatusSetzen(hint);
-        }
-        if (userInitiated && syncCodeInput) {
-            syncBearbeitungsmodusSetzen(true);
-            syncCodeInput.value = currentSyncCode || normalized || "";
-            syncCodeInput.focus();
-            syncCodeInput.select();
+            if (userInitiated) syncBearbeitungsmodusSetzen(false);
+            syncDebugAktualisieren();
         }
         return;
     }
