@@ -289,6 +289,24 @@ function fotoAusIdbLaden(itemId) {
     }));
 }
 
+function syncCodeInIdbSpeichern(code) {
+    return fotoDatenbankOeffnen().then(db => new Promise((resolve, reject) => {
+        const tx = db.transaction(PHOTO_IDB_STORE, "readwrite");
+        tx.objectStore(PHOTO_IDB_STORE).put(code, SYNC_CODE_IDB_KEY);
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+    })).catch(err => console.warn("syncCode IDB Schreibfehler:", err));
+}
+
+function syncCodeAusIdbLaden() {
+    return fotoDatenbankOeffnen().then(db => new Promise(resolve => {
+        const tx = db.transaction(PHOTO_IDB_STORE, "readonly");
+        const req = tx.objectStore(PHOTO_IDB_STORE).get(SYNC_CODE_IDB_KEY);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => resolve(null);
+    })).catch(() => null);
+}
+
 /* --- Lokales Speichern & Laden ----------------------------------- */
 
 async function speichernLokal(daten) {
