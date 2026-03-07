@@ -23,12 +23,18 @@ const _urlCodeGueltig = istGueltigerSyncCode(_normalizedUrlCode);
 const _urlCodeAutoAnwenden = _urlCodeGueltig && (!_hatVorherigenCode || _preExistingCode === _normalizedUrlCode);
 
 if (_urlCodeAutoAnwenden) {
-    localStorage.setItem(SYNC_CODE_KEY, _normalizedUrlCode);
+    // localStorage + IDB speichern – IDB als Backup falls PWA-localStorage leer ist
+    syncCodeSpeichern(_normalizedUrlCode);
+    // ?code= NICHT aus der URL entfernen: iOS speichert die aktuelle URL als PWA-Start-URL.
+    // Bleibt ?code= erhalten, übernimmt die PWA beim ersten Start automatisch den richtigen Code.
 }
 
 if (_rawUrlCode) {
     const _cleanUrl = new URL(location.href);
-    _cleanUrl.searchParams.delete("code");
+    if (!_urlCodeAutoAnwenden) {
+        // Konflikt-Fall: Code im Editor anzeigen, URL bereinigen
+        _cleanUrl.searchParams.delete("code");
+    }
     _cleanUrl.searchParams.delete("u");
     history.replaceState(null, "", _cleanUrl.toString());
 }
