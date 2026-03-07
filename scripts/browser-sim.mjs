@@ -40,6 +40,7 @@ const ctx = {
     },
     location: {
         search: "",
+        hash: "",
         href: "https://example.com/",
         hostname: "example.com",
         pathname: "/",

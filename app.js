@@ -13,26 +13,35 @@ if (btnMic && !SpeechRecognitionCtor) {
     mikStatusSetzen("Spracherkennung wird in diesem Browser nicht unterstuetzt.");
 }
 
-// URL-Code VOR syncCodeUiEinrichten auswerten: syncCodeLaden() würde sonst einen eigenen
-// Code generieren und async dagegen konkurrieren (Race Condition → falscher Code aktiv).
-const _preExistingCode = syncCodeNormalisieren(localStorage.getItem(SYNC_CODE_KEY) || "");
-const _rawUrlCode = new URLSearchParams(location.search).get("code");
+// URL-Code VOR syncCodeUiEinrichten auswerten.
+// Hash (#code=...) hat Vorrang – iOS Safari überträgt den Hash bei "Zum Home-Bildschirm
+// hinzufügen" zuverlässig in die PWA-Start-URL. Query-Param (?code=) bleibt als Fallback
+// für ältere geteilte Links.
+const _hashParams = new URLSearchParams(location.hash.slice(1));
+const _rawHashCode = _hashParams.get("code");
+const _rawQueryCode = new URLSearchParams(location.search).get("code");
+const _rawUrlCode = _rawHashCode || _rawQueryCode;
 const _normalizedUrlCode = _rawUrlCode ? syncCodeNormalisieren(_rawUrlCode) : "";
+
+// Permanent-Slot zuerst prüfen: wurde der Code je bewusst gesetzt, gilt er als vorhandener Code.
+const _preExistingCode = syncCodeNormalisieren(
+    localStorage.getItem(SYNC_CODE_PERMANENT_KEY) ||
+    localStorage.getItem(SYNC_CODE_KEY) || ""
+);
 const _hatVorherigenCode = istGueltigerSyncCode(_preExistingCode) && !istReservierterSyncCode(_preExistingCode);
 const _urlCodeGueltig = istGueltigerSyncCode(_normalizedUrlCode);
 const _urlCodeAutoAnwenden = _urlCodeGueltig && (!_hatVorherigenCode || _preExistingCode === _normalizedUrlCode);
 
 if (_urlCodeAutoAnwenden) {
-    // Permanent speichern: niemals durch auto-generierten Code überschreibbar
     syncCodePermanentSpeichern(_normalizedUrlCode);
-    // ?code= NICHT aus der URL entfernen: iOS speichert die aktuelle URL als PWA-Start-URL.
-    // Bleibt ?code= erhalten, übernimmt die PWA beim ersten Start automatisch den richtigen Code.
 }
 
-if (_rawUrlCode) {
+// Hash NIEMALS entfernen – iOS überträgt ihn in die PWA-Start-URL beim Homescreen-Install.
+// Nur Query-Params bereinigen (?code= im Konfliktfall, ?u= immer).
+const _hasQueryToClean = _rawQueryCode || new URLSearchParams(location.search).get("u");
+if (_hasQueryToClean) {
     const _cleanUrl = new URL(location.href);
-    if (!_urlCodeAutoAnwenden) {
-        // Konflikt-Fall: Code im Editor anzeigen, URL bereinigen
+    if (_rawQueryCode && !_urlCodeAutoAnwenden) {
         _cleanUrl.searchParams.delete("code");
     }
     _cleanUrl.searchParams.delete("u");

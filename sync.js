@@ -206,7 +206,7 @@ async function syncCodeTeilen() {
         return;
     }
     const shareUrl = new URL(location.origin + location.pathname);
-    shareUrl.searchParams.set("code", currentSyncCode);
+    shareUrl.hash = "code=" + currentSyncCode;
     const url = shareUrl.toString();
 
     if (navigator.share) {
