@@ -9,10 +9,13 @@ const APP_CONFIG = window.APP_CONFIG || {};
    KONSTANTEN
 ====================== */
 
-const APP_VERSION = "1.0.127";
+const APP_VERSION = "1.0.128";
 const STORAGE_KEY = "einkaufsliste";
 const SUPABASE_TABLE = "shopping_items";
 const SYNC_CODE_KEY = "einkaufsliste-sync-code";
+// Wird NUR bei bewusstem Code-Setzen (URL-Link, Nutzer-Aktion) gespeichert.
+// Auto-generierte Codes überschreiben diesen Key NIEMALS.
+const SYNC_CODE_PERMANENT_KEY = "einkaufsliste-sync-code-permanent";
 const SYNC_META_PREFIX = "einkaufsliste-sync-meta:";
 const DEVICE_ID_KEY = "einkaufsliste-device-id";
 
