@@ -9,7 +9,7 @@ const APP_CONFIG = window.APP_CONFIG || {};
    KONSTANTEN
 ====================== */
 
-const APP_VERSION = "1.0.125";
+const APP_VERSION = "1.0.126";
 const STORAGE_KEY = "einkaufsliste";
 const SUPABASE_TABLE = "shopping_items";
 const SYNC_CODE_KEY = "einkaufsliste-sync-code";
@@ -26,6 +26,7 @@ const IMAGE_IDB_REF_PREFIX = "__IMG_IDB__:";
 
 const PHOTO_IDB_NAME = "einkaufsliste-photos";
 const PHOTO_IDB_STORE = "photos";
+const SYNC_CODE_IDB_KEY = "__syncCode__";
 
 const SYNC_CODE_LENGTH = 8;
 const RESERVED_SYNC_CODE = "HELP0000";
