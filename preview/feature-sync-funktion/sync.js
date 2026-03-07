@@ -59,6 +59,14 @@ function syncCodeSpeichern(code) {
     syncCodeInIdbSpeichern(code).catch(() => {}); // fire-and-forget
 }
 
+// Wie syncCodeSpeichern, aber schreibt ZUSÄTZLICH in den permanenten Slot.
+// Nur für bewusst gesetzte Codes (URL-Link, Nutzer-Aktion) aufrufen –
+// NIEMALS für auto-generierte Codes.
+function syncCodePermanentSpeichern(code) {
+    localStorage.setItem(SYNC_CODE_PERMANENT_KEY, code);
+    syncCodeSpeichern(code);
+}
+
 function syncCodeLaden() {
     const stored = syncCodeNormalisieren(localStorage.getItem(SYNC_CODE_KEY) || "");
     if (istGueltigerSyncCode(stored) && !istReservierterSyncCode(stored)) return stored;
@@ -68,22 +76,30 @@ function syncCodeLaden() {
 }
 
 async function syncCodeLadenMitBackup() {
-    // 1. localStorage
+    // 1. Permanenter Slot (nur durch bewusste Nutzer-/Link-Aktion gesetzt)
+    const fromPermanent = syncCodeNormalisieren(localStorage.getItem(SYNC_CODE_PERMANENT_KEY) || "");
+    if (istGueltigerSyncCode(fromPermanent) && !istReservierterSyncCode(fromPermanent)) {
+        // Normalen Slot synchron halten
+        localStorage.setItem(SYNC_CODE_KEY, fromPermanent);
+        return fromPermanent;
+    }
+
+    // 2. Normaler localStorage-Slot
     const fromLs = syncCodeNormalisieren(localStorage.getItem(SYNC_CODE_KEY) || "");
     if (istGueltigerSyncCode(fromLs) && !istReservierterSyncCode(fromLs)) return fromLs;
 
-    // 2. IndexedDB-Backup
+    // 3. IndexedDB-Backup
     try {
         const fromIdb = syncCodeNormalisieren((await syncCodeAusIdbLaden()) || "");
         if (istGueltigerSyncCode(fromIdb) && !istReservierterSyncCode(fromIdb)) {
-            localStorage.setItem(SYNC_CODE_KEY, fromIdb); // localStorage wiederherstellen
+            localStorage.setItem(SYNC_CODE_KEY, fromIdb);
             return fromIdb;
         }
     } catch (_) { /* ignore */ }
 
-    // 3. Neuen Code erzeugen
+    // 4. Neuen Code erzeugen – NUR wenn kein permanent-Slot vorhanden
     const created = syncCodeErzeugen();
-    syncCodeSpeichern(created);
+    syncCodeSpeichern(created); // bewusst KEIN syncCodePermanentSpeichern
     return created;
 }
 
@@ -131,7 +147,7 @@ async function syncCodeAnwenden(code, shouldReload = true, options = {}) {
         eingabeFehlerSetzen("");
         if (userInitiated) {
             currentSyncCode = normalized;
-            syncCodeSpeichern(currentSyncCode);
+            syncCodePermanentSpeichern(currentSyncCode);
             if (btnSyncCodeDisplay) btnSyncCodeDisplay.textContent = currentSyncCode;
             authStatusSetzen("Sync nicht verfuegbar. Code lokal gespeichert.");
             syncBearbeitungsmodusSetzen(false);
@@ -162,7 +178,7 @@ async function syncCodeAnwenden(code, shouldReload = true, options = {}) {
         } else {
             // Netzwerk-/Auth-Fehler: Code lokal speichern damit er nach PWA-Neustart erhalten bleibt
             currentSyncCode = normalized;
-            syncCodeSpeichern(currentSyncCode);
+            syncCodePermanentSpeichern(currentSyncCode);
             if (btnSyncCodeDisplay) btnSyncCodeDisplay.textContent = currentSyncCode;
             authStatusSetzen(hint);
             if (userInitiated) syncBearbeitungsmodusSetzen(false);
@@ -172,7 +188,7 @@ async function syncCodeAnwenden(code, shouldReload = true, options = {}) {
     }
 
     currentSyncCode = normalized;
-    syncCodeSpeichern(currentSyncCode);
+    syncCodePermanentSpeichern(currentSyncCode);
     if (syncCodeInput) syncCodeInput.value = currentSyncCode;
     if (btnSyncCodeDisplay) btnSyncCodeDisplay.textContent = currentSyncCode;
     authStatusSetzen(`Geraete-Code: ${currentSyncCode}`);

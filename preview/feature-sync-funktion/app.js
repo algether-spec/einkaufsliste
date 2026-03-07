@@ -23,8 +23,8 @@ const _urlCodeGueltig = istGueltigerSyncCode(_normalizedUrlCode);
 const _urlCodeAutoAnwenden = _urlCodeGueltig && (!_hatVorherigenCode || _preExistingCode === _normalizedUrlCode);
 
 if (_urlCodeAutoAnwenden) {
-    // localStorage + IDB speichern – IDB als Backup falls PWA-localStorage leer ist
-    syncCodeSpeichern(_normalizedUrlCode);
+    // Permanent speichern: niemals durch auto-generierten Code überschreibbar
+    syncCodePermanentSpeichern(_normalizedUrlCode);
     // ?code= NICHT aus der URL entfernen: iOS speichert die aktuelle URL als PWA-Start-URL.
     // Bleibt ?code= erhalten, übernimmt die PWA beim ersten Start automatisch den richtigen Code.
 }
