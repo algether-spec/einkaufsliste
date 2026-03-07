@@ -59,12 +59,27 @@ function syncCodeSpeichern(code) {
     syncCodeInIdbSpeichern(code).catch(() => {}); // fire-and-forget
 }
 
-// Wie syncCodeSpeichern, aber schreibt ZUSÄTZLICH in den permanenten Slot.
+// Wie syncCodeSpeichern, aber schreibt ZUSÄTZLICH in den permanenten Slot
+// und informiert den Service Worker damit das Manifest dynamisch angepasst wird.
 // Nur für bewusst gesetzte Codes (URL-Link, Nutzer-Aktion) aufrufen –
 // NIEMALS für auto-generierte Codes.
 function syncCodePermanentSpeichern(code) {
     localStorage.setItem(SYNC_CODE_PERMANENT_KEY, code);
     syncCodeSpeichern(code);
+    _swSyncCodeSenden(code);
+}
+
+function _swSyncCodeSenden(code) {
+    if (!("serviceWorker" in navigator)) return;
+    const ctrl = navigator.serviceWorker.controller;
+    if (ctrl) {
+        ctrl.postMessage({ type: "SET_SYNC_CODE", code });
+        return;
+    }
+    // Falls SW noch nicht aktiv ist (erster Seitenaufruf): nach Bereitschaft warten
+    navigator.serviceWorker.ready.then(reg => {
+        if (reg.active) reg.active.postMessage({ type: "SET_SYNC_CODE", code });
+    }).catch(() => {});
 }
 
 function syncCodeLaden() {

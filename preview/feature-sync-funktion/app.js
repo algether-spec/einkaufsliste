@@ -78,7 +78,14 @@ if (supabaseClient) {
     }).catch(err => console.warn("Lokales Laden fehlgeschlagen:", err));
 }
 
-// SW-Registrierung (ermöglicht CSP ohne 'unsafe-inline')
+// SW-Registrierung + aktuellen Code an den SW übermitteln damit das Manifest
+// dynamisch mit start_url=#code=... ausgeliefert werden kann (für PWA-Install).
 if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("service-worker.js?v=" + APP_VERSION, { updateViaCache: "none" });
+    navigator.serviceWorker.ready.then(reg => {
+        const _swCode = localStorage.getItem(SYNC_CODE_PERMANENT_KEY) || localStorage.getItem(SYNC_CODE_KEY);
+        if (_swCode && reg.active) {
+            reg.active.postMessage({ type: "SET_SYNC_CODE", code: _swCode });
+        }
+    }).catch(() => {});
 }

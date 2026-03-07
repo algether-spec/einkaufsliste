@@ -31,6 +31,8 @@ const ctx = {
         onLine: true,
         serviceWorker: {
             register: () => Promise.resolve(),
+            ready: Promise.resolve({ active: { postMessage: noop } }),
+            controller: null,
             addEventListener: noop,
             removeEventListener: noop,
             getRegistrations: () => Promise.resolve([]),
