@@ -764,6 +764,12 @@ function syncCodeUiEinrichten() {
 
     const initPromise = syncCodeLadenMitBackup()
         .then(code => syncCodeAnwenden(code, false))
+        .then(() => {
+            // Sicherstellen dass {device_id → sync_code} in sync_invites eingetragen ist.
+            // Ermöglicht sofortiges Teilen ohne Wartezeit und stellt sicher dass
+            // bestehende Geräte (Update von älterer Version) automatisch registriert werden.
+            if (supabaseClient && currentSyncCode) void einladungInDbSpeichern(currentSyncCode);
+        })
         .catch(err => console.warn("Initialer Sync-Code fehlgeschlagen:", err));
     syncBearbeitungsmodusSetzen(false);
 
