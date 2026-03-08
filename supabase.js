@@ -141,6 +141,25 @@ async function syncCodeRpcVerwenden(code, options = {}) {
     return data;
 }
 
+// Liest den Sync-Code zu einer Geräte-ID aus der sync_invites-Tabelle.
+// Wird verwendet wenn ein Einladungs-Link (#invite=<device_id>) geöffnet wird.
+async function syncCodeAusEinladungLaden(deviceId) {
+    if (!supabaseClient || !deviceId) return null;
+    if (!(await authSicherstellen())) return null;
+    try {
+        const { data, error } = await supabaseClient
+            .from("sync_invites")
+            .select("sync_code")
+            .eq("device_id", deviceId)
+            .single();
+        if (error || !data?.sync_code) return null;
+        return String(data.sync_code);
+    } catch (err) {
+        console.warn("Einladungs-Lookup fehlgeschlagen:", err);
+        return null;
+    }
+}
+
 async function syncCodeNutzungAktualisieren(code) {
     if (!supabaseClient) return;
     if (!istGueltigerSyncCode(code)) return;

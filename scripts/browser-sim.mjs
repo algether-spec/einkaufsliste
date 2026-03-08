@@ -98,12 +98,15 @@ ctx.supabase = {
             getSession: () => Promise.resolve({ data: { session: null }, error: null }),
             signInAnonymously: () => Promise.reject(new Error("no network")),
         },
-        from: () => ({
+        from: (table) => ({
+            _table: table,
             select() { return this; },
             eq() { return this; },
             gt() { return this; },
             order() { return this; },
             range() { return this; },
+            upsert() { return Promise.resolve({ data: null, error: null }); },
+            single() { return Promise.resolve({ data: null, error: { message: "not found" } }); },
             then(fn) { return Promise.resolve({ data: [], error: null }).then(fn); },
         }),
         rpc: () => Promise.reject(new Error("no network")),

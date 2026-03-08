@@ -67,6 +67,24 @@ function syncCodePermanentSpeichern(code) {
     localStorage.setItem(SYNC_CODE_PERMANENT_KEY, code);
     syncCodeSpeichern(code);
     _swSyncCodeSenden(code);
+    void einladungInDbSpeichern(code); // Einladungs-Eintrag aktuell halten
+}
+
+// Schreibt {device_id → sync_code} in sync_invites, damit Einladungs-Links
+// immer den aktuellen Code liefern – auch wenn der Code später geändert wird.
+async function einladungInDbSpeichern(code) {
+    if (!supabaseClient) return;
+    if (!istGueltigerSyncCode(code) || istReservierterSyncCode(code)) return;
+    try {
+        if (!(await authSicherstellen())) return;
+        await supabaseClient.from("sync_invites").upsert({
+            device_id: geraeteIdLaden(),
+            sync_code: code,
+            updated_at: new Date().toISOString()
+        }, { onConflict: "device_id" });
+    } catch (err) {
+        console.warn("Einladung in DB speichern fehlgeschlagen:", err);
+    }
 }
 
 function _swSyncCodeSenden(code) {
@@ -221,7 +239,21 @@ async function syncCodeTeilen() {
         return;
     }
     const shareUrl = new URL(location.origin + location.pathname);
-    shareUrl.hash = "code=" + currentSyncCode;
+
+    // Supabase verfügbar: Code in sync_invites speichern, URL enthält nur device_id.
+    // Vorteil: iOS-PWA liest beim Start device_id aus URL und holt aktuellen Code
+    // aus Supabase – kein localStorage-Transfer nötig, Code-Änderungen werden erkannt.
+    if (supabaseClient) {
+        try {
+            await einladungInDbSpeichern(currentSyncCode);
+            shareUrl.hash = "invite=" + geraeteIdLaden();
+        } catch (_) {
+            shareUrl.hash = "code=" + currentSyncCode; // Fallback
+        }
+    } else {
+        shareUrl.hash = "code=" + currentSyncCode; // Offline-Fallback
+    }
+
     const url = shareUrl.toString();
 
     if (navigator.share) {

@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v1.0.130";
+const CACHE_VERSION = "v1.0.132";
 const CACHE_NAME = "einkaufsliste-" + CACHE_VERSION;
 
 // Separater Cache ohne Versionsnummer – überlebt SW-Updates.
@@ -43,7 +43,7 @@ self.addEventListener("activate", event => {
     caches.keys().then(keys =>
       Promise.all(
         keys
-          .filter(key => key !== CACHE_NAME)
+          .filter(key => key !== CACHE_NAME && key !== HANDOFF_CACHE)
           .map(key => caches.delete(key))
       )
     )

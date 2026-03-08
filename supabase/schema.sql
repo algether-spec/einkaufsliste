@@ -549,3 +549,42 @@ grant execute on function public.cleanup_old_data() to authenticated;
 -- select public.cleanup_old_data();
 -- Als Cron-Job (Supabase Dashboard → Database → Scheduled jobs → täglich):
 -- select public.cleanup_old_data();
+
+-- =============================
+-- sync_invites: Geräte-ID → Sync-Code Mapping für Einladungs-Links
+-- Ermöglicht iOS-PWA-kompatibles Teilen: URL enthält nur device_id,
+-- Code wird immer frisch aus Supabase gelesen (kein localStorage-Transfer nötig).
+-- =============================
+
+create table if not exists public.sync_invites (
+  device_id text primary key,
+  sync_code text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.sync_invites enable row level security;
+
+grant select, insert, update on public.sync_invites to authenticated;
+
+drop policy if exists "sync_invites_select" on public.sync_invites;
+create policy "sync_invites_select"
+on public.sync_invites
+for select
+to authenticated
+using (true);
+
+drop policy if exists "sync_invites_insert" on public.sync_invites;
+create policy "sync_invites_insert"
+on public.sync_invites
+for insert
+to authenticated
+with check (device_id is not null and length(trim(device_id)) > 0);
+
+drop policy if exists "sync_invites_update" on public.sync_invites;
+create policy "sync_invites_update"
+on public.sync_invites
+for update
+to authenticated
+using (true)
+with check (device_id is not null and length(trim(device_id)) > 0);
