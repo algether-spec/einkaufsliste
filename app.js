@@ -48,6 +48,16 @@ if (_hasQueryToClean) {
     history.replaceState(null, "", _cleanUrl.toString());
 }
 
+// Kritischer Fix für iOS-PWA-localStorage-Isolation:
+// #invite=<device_id> in der URL ist das einzige zuverlässige Signal dass
+// dieses Gerät ein Gast ist – auch nach PWA-Install mit frischem localStorage.
+// Muss VOR syncCodeUiEinrichten gesetzt werden damit _rolleNachCodeAnwenden
+// nicht fälschlicherweise "hauptgeraet" setzt.
+// Eigene Invite-URL (Hauptgerät öffnet seinen eigenen Link) wird ignoriert.
+if (_inviteDeviceId && _inviteDeviceId !== geraeteIdLaden()) {
+    geraetRolleSetzen("gast");
+}
+
 const _initPromise = syncCodeUiEinrichten();
 
 // #invite=<device_id>: Code aus Supabase laden und anwenden / Konflikt-Dialog zeigen.

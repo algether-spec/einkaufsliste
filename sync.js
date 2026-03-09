@@ -103,6 +103,39 @@ function geraetRolleSetzen(rolle) {
     geraetRolleUiAktualisieren();
 }
 
+// Speichert die Rolle in Supabase – überlebt iOS-PWA-Install (localStorage-Isolation).
+async function geraetRolleInSupabaseSpeichern(rolle, syncCode) {
+    if (!supabaseClient || !rolle || !syncCode) return;
+    try {
+        if (!(await authSicherstellen())) return;
+        await supabaseClient.from("device_roles").upsert({
+            device_id: geraeteIdLaden(),
+            rolle,
+            sync_code: syncCode,
+            updated_at: new Date().toISOString()
+        }, { onConflict: "device_id" });
+    } catch (err) {
+        console.warn("Geräte-Rolle in Supabase speichern fehlgeschlagen:", err);
+    }
+}
+
+// Lädt die Rolle aus Supabase – Fallback wenn localStorage leer ist.
+async function geraetRolleAusSupabaseLaden() {
+    if (!supabaseClient) return null;
+    try {
+        if (!(await authSicherstellen())) return null;
+        const { data, error } = await supabaseClient
+            .from("device_roles")
+            .select("rolle")
+            .eq("device_id", geraeteIdLaden())
+            .single();
+        if (error || !data?.rolle) return null;
+        return String(data.rolle);
+    } catch (_) {
+        return null;
+    }
+}
+
 function geraetRolleUiAktualisieren() {
     const rolle = geraetRolleLesen();
     const hatCode = istGueltigerSyncCode(currentSyncCode) && !istReservierterSyncCode(currentSyncCode);
@@ -222,6 +255,7 @@ async function syncCodeAnwenden(code, shouldReload = true, options = {}) {
             syncBearbeitungsmodusSetzen(false);
             syncDebugAktualisieren();
         }
+        _rolleNachCodeAnwenden(userInitiated); // Rolle auch ohne Netz setzen
         return;
     }
 
@@ -271,18 +305,32 @@ async function syncCodeAnwenden(code, shouldReload = true, options = {}) {
     if (shouldReload) void laden();
 }
 
-// Setzt oder bestätigt die Geräte-Rolle nach erfolgreichem Code-Anwenden.
-// userInitiated=true → Gast (Nutzer hat bewusst fremden Code eingetragen).
-// userInitiated=false + Rolle leer → Hauptgerät (eigener auto-generierter Code).
-// Bestehende Rolle wird niemals überschrieben.
+// Setzt oder bestätigt die Geräte-Rolle nach Code-Anwenden.
+// Sicherheitsregel: "einmal Gast, immer Gast" – Gast kann nie Hauptgerät werden.
+// Schreibt die finale Rolle in Supabase (überlebt iOS-PWA-localStorage-Isolation).
 function _rolleNachCodeAnwenden(userInitiated) {
+    const aktuelle = geraetRolleLesen();
+
+    let neueRolle;
     if (userInitiated) {
-        geraetRolleSetzen("gast");
-    } else if (!geraetRolleLesen()) {
-        geraetRolleSetzen("hauptgeraet");
+        neueRolle = "gast";
+    } else if (!aktuelle) {
+        neueRolle = "hauptgeraet";
+    } else {
+        neueRolle = aktuelle; // Bestehende Rolle beibehalten
+    }
+
+    // Sicherheitsregel: Gast kann sich niemals selbst zum Hauptgerät machen
+    if (aktuelle === "gast" && neueRolle !== "gast") neueRolle = "gast";
+
+    if (neueRolle !== aktuelle) {
+        geraetRolleSetzen(neueRolle);
     } else {
         geraetRolleUiAktualisieren();
     }
+
+    // In Supabase persistieren – unabhängig von localStorage (iOS-PWA-Isolation)
+    void geraetRolleInSupabaseSpeichern(neueRolle, currentSyncCode);
 }
 
 async function syncCodeTeilen() {
@@ -818,12 +866,18 @@ function syncCodeUiEinrichten() {
 
     const initPromise = syncCodeLadenMitBackup()
         .then(code => syncCodeAnwenden(code, false))
-        .then(() => {
+        .then(async () => {
             // Sicherstellen dass {device_id → sync_code} in sync_invites eingetragen ist.
             // Ermöglicht sofortiges Teilen ohne Wartezeit und stellt sicher dass
             // bestehende Geräte (Update von älterer Version) automatisch registriert werden.
             if (supabaseClient && currentSyncCode) void einladungInDbSpeichern(currentSyncCode);
-            geraetRolleUiAktualisieren(); // Buttons nach Code-Setup aktualisieren
+            // Fallback: Rolle aus Supabase laden wenn lokal noch leer
+            // (z. B. Geräte die vor Einführung der Rollen-Logik installiert wurden)
+            if (!geraetRolleLesen() && supabaseClient && currentSyncCode) {
+                const rolleAusDb = await geraetRolleAusSupabaseLaden();
+                if (rolleAusDb) geraetRolleSetzen(rolleAusDb);
+            }
+            geraetRolleUiAktualisieren();
         })
         .catch(err => console.warn("Initialer Sync-Code fehlgeschlagen:", err));
     syncBearbeitungsmodusSetzen(false);

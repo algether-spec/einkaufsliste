@@ -551,6 +551,48 @@ grant execute on function public.cleanup_old_data() to authenticated;
 -- select public.cleanup_old_data();
 
 -- =============================
+-- device_roles: Geräte-Rolle in Supabase persistieren
+-- Überlebt iOS-PWA-Install (localStorage-Isolation zwischen Safari und PWA).
+-- Hauptgerät = hat den Code ursprünglich generiert.
+-- Gast = hat sich über einen Teilen-Link verbunden.
+-- Sicherheitsregel: Rolle kann sich niemals ändern (kein UPDATE nach INSERT).
+-- =============================
+
+create table if not exists public.device_roles (
+  device_id text primary key,
+  rolle text not null check (rolle in ('hauptgeraet', 'gast')),
+  sync_code text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.device_roles enable row level security;
+
+grant select, insert, update on public.device_roles to authenticated;
+
+drop policy if exists "device_roles_select" on public.device_roles;
+create policy "device_roles_select"
+on public.device_roles
+for select
+to authenticated
+using (true);
+
+drop policy if exists "device_roles_insert" on public.device_roles;
+create policy "device_roles_insert"
+on public.device_roles
+for insert
+to authenticated
+with check (device_id is not null and length(trim(device_id)) > 0);
+
+drop policy if exists "device_roles_update" on public.device_roles;
+create policy "device_roles_update"
+on public.device_roles
+for update
+to authenticated
+using (true)
+with check (device_id is not null and length(trim(device_id)) > 0);
+
+-- =============================
 -- sync_invites: Geräte-ID → Sync-Code Mapping für Einladungs-Links
 -- Ermöglicht iOS-PWA-kompatibles Teilen: URL enthält nur device_id,
 -- Code wird immer frisch aus Supabase gelesen (kein localStorage-Transfer nötig).

@@ -98,8 +98,7 @@ ctx.supabase = {
             getSession: () => Promise.resolve({ data: { session: null }, error: null }),
             signInAnonymously: () => Promise.reject(new Error("no network")),
         },
-        from: (table) => ({
-            _table: table,
+        from: (_table) => ({
             select() { return this; },
             eq() { return this; },
             gt() { return this; },
