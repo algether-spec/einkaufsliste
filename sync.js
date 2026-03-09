@@ -87,6 +87,34 @@ async function einladungInDbSpeichern(code) {
     }
 }
 
+/* --- Geräte-Rolle ----------------------------------------------- */
+
+// "hauptgeraet" = eigener Code, kann teilen
+// "gast"        = fremder Code, nur lesen/bearbeiten
+// ""            = neu, noch nicht festgelegt
+
+function geraetRolleLesen() {
+    return localStorage.getItem(SYNC_GERAET_ROLLE_KEY) || "";
+}
+
+function geraetRolleSetzen(rolle) {
+    if (rolle) localStorage.setItem(SYNC_GERAET_ROLLE_KEY, rolle);
+    else localStorage.removeItem(SYNC_GERAET_ROLLE_KEY);
+    geraetRolleUiAktualisieren();
+}
+
+function geraetRolleUiAktualisieren() {
+    const rolle = geraetRolleLesen();
+    const hatCode = istGueltigerSyncCode(currentSyncCode) && !istReservierterSyncCode(currentSyncCode);
+
+    // Teilen: nur Hauptgerät mit gültigem Code sichtbar
+    if (btnSyncCodeShare) btnSyncCodeShare.hidden = (rolle !== "hauptgeraet" || !hatCode);
+
+    // Verbinden: nur für neue Geräte (Rolle noch leer)
+    if (btnSyncConnect) btnSyncConnect.hidden = (rolle !== "");
+}
+
+
 function _swSyncCodeSenden(code) {
     if (!("serviceWorker" in navigator)) return;
     const ctrl = navigator.serviceWorker.controller;
@@ -215,6 +243,7 @@ async function syncCodeAnwenden(code, shouldReload = true, options = {}) {
             if (btnSyncCodeDisplay) btnSyncCodeDisplay.textContent = currentSyncCode;
             authStatusSetzen(hint);
             if (userInitiated) syncBearbeitungsmodusSetzen(false);
+            _rolleNachCodeAnwenden(userInitiated);
             syncDebugAktualisieren();
         }
         return;
@@ -226,11 +255,26 @@ async function syncCodeAnwenden(code, shouldReload = true, options = {}) {
     if (btnSyncCodeDisplay) btnSyncCodeDisplay.textContent = currentSyncCode;
     authStatusSetzen(`Geraete-Code: ${currentSyncCode}`);
     eingabeFehlerSetzen("");
+    _rolleNachCodeAnwenden(userInitiated);
     if (userInitiated) syncBearbeitungsmodusSetzen(false);
     if (syncCodeInput) syncCodeInput.blur();
     if (supabaseClient) echtzeitSyncStarten();
     syncDebugAktualisieren();
     if (shouldReload) void laden();
+}
+
+// Setzt oder bestätigt die Geräte-Rolle nach erfolgreichem Code-Anwenden.
+// userInitiated=true → Gast (Nutzer hat bewusst fremden Code eingetragen).
+// userInitiated=false + Rolle leer → Hauptgerät (eigener auto-generierter Code).
+// Bestehende Rolle wird niemals überschrieben.
+function _rolleNachCodeAnwenden(userInitiated) {
+    if (userInitiated) {
+        geraetRolleSetzen("gast");
+    } else if (!geraetRolleLesen()) {
+        geraetRolleSetzen("hauptgeraet");
+    } else {
+        geraetRolleUiAktualisieren();
+    }
 }
 
 async function syncCodeTeilen() {
@@ -746,7 +790,9 @@ function syncDebugAktualisieren() {
 
 function syncBearbeitungsmodusSetzen(enabled) {
     syncEditMode = Boolean(enabled);
-    const showAuthBar = syncEditMode && modus === MODUS_ERFASSEN;
+    // Gäste können den Code nicht ändern → auth-bar niemals anzeigen
+    const darfBearbeiten = geraetRolleLesen() !== "gast";
+    const showAuthBar = syncEditMode && modus === MODUS_ERFASSEN && darfBearbeiten;
     if (authBar) authBar.hidden = !showAuthBar;
     if (syncCodeCompact) syncCodeCompact.hidden = modus !== MODUS_ERFASSEN;
     if (syncCodeInput && syncEditMode && modus === MODUS_ERFASSEN) {
@@ -769,6 +815,7 @@ function syncCodeUiEinrichten() {
             // Ermöglicht sofortiges Teilen ohne Wartezeit und stellt sicher dass
             // bestehende Geräte (Update von älterer Version) automatisch registriert werden.
             if (supabaseClient && currentSyncCode) void einladungInDbSpeichern(currentSyncCode);
+            geraetRolleUiAktualisieren(); // Buttons nach Code-Setup aktualisieren
         })
         .catch(err => console.warn("Initialer Sync-Code fehlgeschlagen:", err));
     syncBearbeitungsmodusSetzen(false);
@@ -814,10 +861,9 @@ function syncCodeUiEinrichten() {
         };
     }
 
-    const btnSyncConnect = document.getElementById("btn-sync-connect");
     if (btnSyncConnect) {
         btnSyncConnect.onclick = () => {
-            if (syncCodeInput) syncCodeInput.value = currentSyncCode || "";
+            if (syncCodeInput) syncCodeInput.value = "";
             syncBearbeitungsmodusSetzen(true);
         };
     }
@@ -825,6 +871,9 @@ function syncCodeUiEinrichten() {
     if (btnSyncCodeShare) {
         btnSyncCodeShare.onclick = () => void syncCodeTeilen();
     }
+
+    // Initiale UI-Anpassung (Rolle ggf. noch leer → zeigt Verbinden)
+    geraetRolleUiAktualisieren();
 
     return initPromise;
 }

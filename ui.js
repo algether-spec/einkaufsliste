@@ -14,6 +14,7 @@ const btnForceUpdate = document.getElementById("btn-force-update");
 const syncCodeCompact   = document.getElementById("sync-code-compact");
 const btnSyncCodeDisplay = document.getElementById("btn-sync-code-display");
 const btnSyncCodeShare   = document.getElementById("btn-sync-code-share");
+const btnSyncConnect     = document.getElementById("btn-sync-connect");
 const versionBadge   = document.getElementById("version-badge");
 const syncStatus     = document.getElementById("sync-status");
 const syncDebug      = document.getElementById("sync-debug");
