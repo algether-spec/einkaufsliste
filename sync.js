@@ -112,6 +112,14 @@ function geraetRolleUiAktualisieren() {
 
     // Verbinden: nur für neue Geräte (Rolle noch leer)
     if (btnSyncConnect) btnSyncConnect.hidden = (rolle !== "");
+
+    // Versions-Badge: Rolle als Zusatz anzeigen
+    if (versionBadge) {
+        const rolleLabel = rolle === "hauptgeraet" ? " · Hauptgerät"
+                         : rolle === "gast"        ? " · Gast"
+                         : "";
+        versionBadge.textContent = "v" + APP_VERSION + rolleLabel;
+    }
 }
 
 
