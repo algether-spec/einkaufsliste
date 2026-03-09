@@ -80,11 +80,20 @@ if (_inviteDeviceId && supabaseClient) {
             return;
         }
 
-        // Gast: Code nicht wechseln (kein Verbinden-Button, kein Dialog)
-        if (geraetRolleLesen() === "gast") return;
+        // Gast mit korrektem permanenten Code → bereits verbunden, nichts tun.
+        // NICHT: blanket return für alle Gäste – frische PWA hat auto-generierten Code
+        // als permanenten Code gespeichert, der ≠ Einladungs-Code ist.
+        if (geraetRolleLesen() === "gast") {
+            const _permanentCodeGast = syncCodeNormalisieren(
+                localStorage.getItem(SYNC_CODE_PERMANENT_KEY) || ""
+            );
+            if (_permanentCodeGast === _normalizedInvite) return;
+            // Permanenter Code stimmt nicht (z.B. frische PWA) → Einladungs-Code anwenden
+        }
 
-        if (!currentSyncCode || !istGueltigerSyncCode(currentSyncCode)) {
-            // Kein bestehender Code → direkt übernehmen (Erstinstall / frische PWA)
+        if (!currentSyncCode || !istGueltigerSyncCode(currentSyncCode) || geraetRolleLesen() === "gast") {
+            // Kein gültiger Code ODER Gast-Gerät ohne korrekten permanenten Code
+            // → Einladungs-Code direkt übernehmen (Erstinstall / frische PWA)
             localStorage.setItem(SYNC_INVITE_DEVICE_KEY, _inviteDeviceId);
             geraetRolleSetzen("gast");
             await syncCodeAnwenden(_normalizedInvite, true, { allowOccupied: true });

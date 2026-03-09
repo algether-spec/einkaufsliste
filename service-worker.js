@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v1.0.136";
+const CACHE_VERSION = "v1.0.137";
 const CACHE_NAME = "einkaufsliste-" + CACHE_VERSION;
 
 // Separater Cache ohne Versionsnummer – überlebt SW-Updates.
