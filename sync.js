@@ -17,6 +17,8 @@ let updateLaeuft = false;
 let snapshotWirdAngewendet = false;
 let _aenderungenNachSnapshotAusstehend = false;
 let _speichernSyncTimer = null;
+let _geraeteAnzahlTimer = null;
+let _geraeteAnzahlKanal = null;
 
 const syncState = {
     lock: Promise.resolve(),
@@ -149,6 +151,52 @@ function geraetRolleUiAktualisieren() {
                          : "";
         versionBadge.textContent = "v" + APP_VERSION + rolleLabel;
     }
+
+    // Geräte-Anzahl: nur Hauptgerät
+    if (rolle === "hauptgeraet" && hatCode) {
+        if (!_geraeteAnzahlKanal) geraeteAnzahlSyncStarten();
+    } else {
+        geraeteAnzahlSyncStoppen();
+    }
+}
+
+async function _geraeteAnzahlAktualisieren() {
+    if (geraetRolleLesen() !== "hauptgeraet" || !currentSyncCode) return;
+    const anzahl = await geraeteAnzahlLaden(currentSyncCode);
+    geraeteAnzahlSetzen(anzahl);
+}
+
+function geraeteAnzahlSyncStarten() {
+    geraeteAnzahlSyncStoppen();
+    if (!supabaseClient || !currentSyncCode || geraetRolleLesen() !== "hauptgeraet") return;
+
+    void _geraeteAnzahlAktualisieren();
+    _geraeteAnzahlTimer = setInterval(() => void _geraeteAnzahlAktualisieren(), 30000);
+
+    _geraeteAnzahlKanal = supabaseClient
+        .channel(`device_roles_${currentSyncCode}`)
+        .on("postgres_changes", {
+            event: "*",
+            schema: "public",
+            table: "device_roles",
+            filter: `sync_code=eq.${currentSyncCode}`
+        }, () => void _geraeteAnzahlAktualisieren())
+        .subscribe(status => {
+            if (status === "CHANNEL_ERROR") {
+                console.warn("Geraete-Realtime Fehler, nutze Polling.");
+                try { supabaseClient.removeChannel(_geraeteAnzahlKanal); } catch (_) {}
+                _geraeteAnzahlKanal = null;
+            }
+        });
+}
+
+function geraeteAnzahlSyncStoppen() {
+    if (_geraeteAnzahlTimer) { clearInterval(_geraeteAnzahlTimer); _geraeteAnzahlTimer = null; }
+    if (_geraeteAnzahlKanal && supabaseClient) {
+        try { supabaseClient.removeChannel(_geraeteAnzahlKanal); } catch (_) {}
+        _geraeteAnzahlKanal = null;
+    }
+    geraeteAnzahlSetzen(0);
 }
 
 

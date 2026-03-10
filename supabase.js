@@ -273,6 +273,19 @@ async function syncCodeNutzungAktualisieren(code) {
     await syncCodeRpcVerwenden(code, { allowCreate: true, requireNew: false });
 }
 
+async function geraeteAnzahlLaden(syncCode) {
+    if (!supabaseClient || !syncCode) return 0;
+    if (!(await authSicherstellen())) return 0;
+    try {
+        const { count, error } = await supabaseClient
+            .from("device_roles")
+            .select("device_id", { count: "exact", head: true })
+            .eq("sync_code", syncCode);
+        if (error) return 0;
+        return count || 0;
+    } catch (_) { return 0; }
+}
+
 
 /* --- Remote-Operationen ----------------------------------------- */
 
