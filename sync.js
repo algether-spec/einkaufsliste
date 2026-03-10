@@ -158,6 +158,7 @@ function _swInstallKontextSenden(context = {}) {
     const payload = {
         type: "SET_INSTALL_CONTEXT",
         joinToken: String(context.joinToken || ""),
+        inviteDeviceId: String(context.inviteDeviceId || ""),
         code: String(context.code || "")
     };
     if (ctrl) {
