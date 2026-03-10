@@ -44,7 +44,10 @@
 
 <div class="app">
 
-    <header>Einkaufen</header>
+    <header>
+        <span class="header-title">Einkaufen</span>
+        <button type="button" id="btn-help" class="help-button" title="Hilfe">❓</button>
+    </header>
 
     <div class="sync-code-compact" id="sync-code-compact">
         <div class="sync-code-row">
@@ -54,7 +57,6 @@
             <button type="button" id="btn-sync-connect" class="sync-code-edit">Verbinden</button>
             <button type="button" id="btn-force-update" class="update-button">Update</button>
         </div>
-        <div class="sync-code-hint">Hinweis: Code HELP0000 oeffnet nur die Kurzanleitung.</div>
     </div>
 
     <div class="auth-bar" id="auth-bar" hidden>
@@ -128,15 +130,44 @@
         <div class="help-card">
             <button type="button" id="btn-help-viewer-close" class="help-close">Schließen</button>
             <h2>Kurzanleitung</h2>
-            <ol>
-                <li>App einmal installieren und danach als App öffnen (PWA).</li>
-                <li>Auf beiden Handys denselben Geräte-Code im Format AAAA1234 eingeben.</li>
-                <li><strong>Text:</strong> In das Feld schreiben, dann <strong>Übernehmen</strong>.</li>
-                <li><strong>Sprache:</strong> Auf <strong>🎤</strong> tippen, Text prüfen, dann <strong>Übernehmen</strong>.</li>
-                <li><strong>Bild:</strong> Auf <strong>Foto</strong> tippen; das Foto wird sofort gespeichert.</li>
-                <li>Im Modus <strong>Einkaufen</strong> Artikel antippen, um sie abzuhaken.</li>
-                <li>Code <strong>HELP0000</strong> ist nur für diese Kurzanleitung reserviert.</li>
-            </ol>
+
+            <div class="help-section">
+                <div class="help-section-title">📱 Buttons erklärt</div>
+                <ul class="help-list">
+                    <li><strong>↵</strong> – Neue Zeile einfügen</li>
+                    <li><strong>Löschen</strong> – Eingabefeld leeren</li>
+                    <li><strong>Übernehmen</strong> – Artikel zur Liste hinzufügen</li>
+                    <li><strong>Foto</strong> – Foto aufnehmen, Text wird erkannt</li>
+                    <li><strong>Export</strong> – Liste als Text kopieren</li>
+                </ul>
+            </div>
+
+            <div class="help-section">
+                <div class="help-section-title">🎤 Mikrofon</div>
+                <ul class="help-list">
+                    <li>Auf <strong>🎤</strong> tippen, um Spracherkennung zu starten</li>
+                    <li>Text im Eingabefeld prüfen</li>
+                    <li>Mit <strong>Übernehmen</strong> zur Liste hinzufügen</li>
+                </ul>
+            </div>
+
+            <div class="help-section">
+                <div class="help-section-title">🔄 Sync &amp; Teilen</div>
+                <ul class="help-list">
+                    <li>App auf beiden Geräten öffnen</li>
+                    <li>Auf <strong>Verbinden</strong> tippen und denselben Code eingeben (Format AAAA1234)</li>
+                    <li>Oder: Auf <strong>Teilen</strong> tippen – Link direkt ans andere Gerät senden</li>
+                    <li>Änderungen werden automatisch synchronisiert</li>
+                </ul>
+            </div>
+
+            <div class="help-section">
+                <div class="help-section-title">📤 Export</div>
+                <ul class="help-list">
+                    <li>Auf <strong>Export</strong> tippen</li>
+                    <li>Die aktuelle Liste wird als Text in die Zwischenablage kopiert</li>
+                </ul>
+            </div>
         </div>
     </div>
 

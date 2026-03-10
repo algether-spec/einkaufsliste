@@ -37,6 +37,7 @@ const imageViewerImg   = document.getElementById("image-viewer-img");
 const btnImageViewerClose = document.getElementById("btn-image-viewer-close");
 const helpViewer          = document.getElementById("help-viewer");
 const btnHelpViewerClose  = document.getElementById("btn-help-viewer-close");
+const btnHelp             = document.getElementById("btn-help");
 
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -399,6 +400,7 @@ if (imageViewer) {
         if (event.target === imageViewer) bildViewerSchliessen();
     };
 }
+if (btnHelp) btnHelp.onclick = hilfeViewerOeffnen;
 if (btnHelpViewerClose) btnHelpViewerClose.onclick = hilfeViewerSchliessen;
 if (helpViewer) {
     helpViewer.onclick = event => {

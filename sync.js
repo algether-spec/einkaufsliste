@@ -296,8 +296,7 @@ async function syncCodeAnwenden(code, shouldReload = true, options = {}) {
         return;
     }
     if (istReservierterSyncCode(normalized)) {
-        hilfeViewerOeffnen();
-        authStatusSetzen("Code HELP0000 oeffnet die Kurzanleitung.");
+        authStatusSetzen("Code HELP0000 ist reserviert und kann nicht verwendet werden.");
         if (syncCodeInput) syncCodeInput.value = currentSyncCode || "";
         if (userInitiated) syncBearbeitungsmodusSetzen(true);
         return;
