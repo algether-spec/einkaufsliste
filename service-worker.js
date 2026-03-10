@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v1.0.139";
+const CACHE_VERSION = "v1.0.140";
 const CACHE_NAME = "einkaufsliste-" + CACHE_VERSION;
 
 // Separater Cache ohne Versionsnummer – überlebt SW-Updates.
@@ -59,6 +59,7 @@ self.addEventListener("message", event => {
   if (event.data?.type === "SET_INSTALL_CONTEXT") {
     _manifestInstallContext = {
       joinToken: String(event.data.joinToken || ""),
+      inviteDeviceId: String(event.data.inviteDeviceId || ""),
       code: String(event.data.code || "")
     };
     // Persistent speichern – überlebt SW-Neustarts
@@ -98,12 +99,17 @@ async function manifestMitKontextAusliefern(request) {
     if (cached) response = cached;
   }
   if (!response) return new Response("Not found", { status: 404 });
-  if (!context?.joinToken && !context?.code) return response;
+  if (!context?.joinToken && !context?.inviteDeviceId && !context?.code) return response;
   try {
     const manifest = await response.json();
     if (context?.joinToken) {
+      // Bevorzugt: serverseitiger Join-Token (enthält Rolle + Code)
       manifest.start_url = "./#join=" + encodeURIComponent(context.joinToken);
+    } else if (context?.inviteDeviceId) {
+      // Fallback für Gäste: legacy invite-Pfad via sync_invites-Tabelle
+      manifest.start_url = "./#invite=" + encodeURIComponent(context.inviteDeviceId);
     } else if (context?.code) {
+      // Fallback für Hauptgerät: Code direkt (Rolle wird beim Start aus Supabase geladen)
       manifest.start_url = "./#code=" + context.code;
     }
     return new Response(JSON.stringify(manifest), {

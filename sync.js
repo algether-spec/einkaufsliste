@@ -184,10 +184,17 @@ async function installKontextAktualisieren() {
         createdByDeviceId: geraeteIdLaden(),
         expiresInMs: 1000 * 60 * 60 * 24 * 30
     });
-    if (!saved?.joinToken) return;
-    currentInstallJoinToken = saved.joinToken;
-    currentInstallContextKey = nextKey;
-    _swInstallKontextSenden({ joinToken: currentInstallJoinToken, code: currentSyncCode });
+    if (saved?.joinToken) {
+        currentInstallJoinToken = saved.joinToken;
+        currentInstallContextKey = nextKey;
+        _swInstallKontextSenden({ joinToken: currentInstallJoinToken, code: currentSyncCode });
+    } else {
+        // Fallback wenn device_join_tokens Tabelle fehlt oder Netzwerkfehler:
+        // Gäste nutzen #invite=<deviceId> (liest sync_invites → keine neuen Tabellen nötig).
+        // Hauptgerät nutzt #code=<code> (Rolle wird beim PWA-Start aus Supabase geladen).
+        const inviteDeviceId = rolle === "gast" ? geraeteIdLaden() : "";
+        _swInstallKontextSenden({ inviteDeviceId, code: currentSyncCode });
+    }
 }
 
 async function initialenGeraeteStatusErmitteln(options = {}) {

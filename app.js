@@ -94,10 +94,14 @@ if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("service-worker.js?v=" + APP_VERSION, { updateViaCache: "none" });
     navigator.serviceWorker.ready.then(reg => {
         const _swCode = localStorage.getItem(SYNC_CODE_PERMANENT_KEY) || localStorage.getItem(SYNC_CODE_KEY);
-        if ((_joinToken || _swCode) && reg.active) {
+        if ((_joinToken || _inviteDeviceId || _swCode) && reg.active) {
             reg.active.postMessage({
                 type: "SET_INSTALL_CONTEXT",
                 joinToken: _joinToken || "",
+                // Erster Sofort-Kontext für den SW: falls #invite= in der URL.
+                // installKontextAktualisieren() ersetzt dies später mit der eigenen device_id
+                // sobald der Code angewendet und sync_invites aktualisiert wurde.
+                inviteDeviceId: _inviteDeviceId || "",
                 code: _swCode || ""
             });
         }
