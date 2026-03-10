@@ -166,13 +166,6 @@ header {
     font-weight: 700;
 }
 
-.geraete-anzahl {
-    font-size: 11px;
-    color: #64748b;
-    padding: 2px 4px 4px;
-    text-align: right;
-}
-
 .sync-code-display {
     min-height: 28px;
     padding: 4px 10px;

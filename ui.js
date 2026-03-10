@@ -38,7 +38,6 @@ const btnImageViewerClose = document.getElementById("btn-image-viewer-close");
 const helpViewer          = document.getElementById("help-viewer");
 const btnHelpViewerClose  = document.getElementById("btn-help-viewer-close");
 const btnHelp             = document.getElementById("btn-help");
-const geraeteAnzahlDiv    = document.getElementById("geraete-anzahl");
 
 const SpeechRecognitionCtor =
     window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -67,12 +66,6 @@ function eingabeFehlerSetzen(text) {
     inputErrorStatus.textContent = String(text || "").trim();
 }
 
-function geraeteAnzahlSetzen(anzahl) {
-    if (!geraeteAnzahlDiv) return;
-    if (anzahl < 1) { geraeteAnzahlDiv.hidden = true; return; }
-    geraeteAnzahlDiv.textContent = anzahl === 1 ? "1 Gerät verbunden" : `${anzahl} Geräte verbunden`;
-    geraeteAnzahlDiv.hidden = false;
-}
 
 
 /* --- Listen-Rendering ------------------------------------------- */

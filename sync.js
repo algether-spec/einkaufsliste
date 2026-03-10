@@ -19,6 +19,7 @@ let _aenderungenNachSnapshotAusstehend = false;
 let _speichernSyncTimer = null;
 let _geraeteAnzahlTimer = null;
 let _geraeteAnzahlKanal = null;
+let _geraeteAnzahl = 0;
 
 const syncState = {
     lock: Promise.resolve(),
@@ -144,12 +145,13 @@ function geraetRolleUiAktualisieren() {
     // Verbinden: nur für neue Geräte (Rolle noch leer)
     if (btnSyncConnect) btnSyncConnect.hidden = (rolle !== "");
 
-    // Versions-Badge: Rolle als Zusatz anzeigen
+    // Versions-Badge: Rolle + Geräte-Anzahl anzeigen
     if (versionBadge) {
+        const anzahlLabel = (rolle === "hauptgeraet" && _geraeteAnzahl > 0) ? ` · ${_geraeteAnzahl}` : "";
         const rolleLabel = rolle === "hauptgeraet" ? " · Hauptgerät"
                          : rolle === "gast"        ? " · Gast"
                          : "";
-        versionBadge.textContent = "v" + APP_VERSION + rolleLabel;
+        versionBadge.textContent = "v" + APP_VERSION + rolleLabel + anzahlLabel;
     }
 
     // Geräte-Anzahl: nur Hauptgerät
@@ -162,8 +164,8 @@ function geraetRolleUiAktualisieren() {
 
 async function _geraeteAnzahlAktualisieren() {
     if (geraetRolleLesen() !== "hauptgeraet" || !currentSyncCode) return;
-    const anzahl = await geraeteAnzahlLaden(currentSyncCode);
-    geraeteAnzahlSetzen(anzahl);
+    _geraeteAnzahl = await geraeteAnzahlLaden(currentSyncCode);
+    geraetRolleUiAktualisieren();
 }
 
 function geraeteAnzahlSyncStarten() {
@@ -196,7 +198,7 @@ function geraeteAnzahlSyncStoppen() {
         try { supabaseClient.removeChannel(_geraeteAnzahlKanal); } catch (_) {}
         _geraeteAnzahlKanal = null;
     }
-    geraeteAnzahlSetzen(0);
+    _geraeteAnzahl = 0;
 }
 
 
