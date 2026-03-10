@@ -6,6 +6,9 @@
 /* --- Sync-Zustand ----------------------------------------------- */
 
 let currentSyncCode = "";
+let currentDeviceRole = "";
+let currentInstallJoinToken = "";
+let currentInstallContextKey = "";
 let syncEditMode = false;
 let lastSyncAt = "";
 let hintergrundTimer = null;
@@ -40,6 +43,17 @@ function istReservierterSyncCode(code) {
     return code === RESERVED_SYNC_CODE;
 }
 
+function istGueltigeGeraeteRolle(rolle) {
+    return rolle === "hauptgeraet" || rolle === "gast";
+}
+
+function joinTokenErzeugen() {
+    const raw = window.crypto?.randomUUID
+        ? window.crypto.randomUUID().replace(/-/g, "")
+        : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 14)}`;
+    return raw.toLowerCase();
+}
+
 function syncCodeErzeugen() {
     const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     let nextCode = RESERVED_SYNC_CODE;
@@ -59,14 +73,14 @@ function syncCodeSpeichern(code) {
     syncCodeInIdbSpeichern(code).catch(() => {}); // fire-and-forget
 }
 
-// Wie syncCodeSpeichern, aber schreibt ZUSÄTZLICH in den permanenten Slot
-// und informiert den Service Worker damit das Manifest dynamisch angepasst wird.
+// Wie syncCodeSpeichern, aber schreibt ZUSÄTZLICH in den permanenten Slot.
+// Der Service Worker erhält den Install-Kontext separat, sobald Rolle und Code
+// serverseitig feststehen.
 // Nur für bewusst gesetzte Codes (URL-Link, Nutzer-Aktion) aufrufen –
 // NIEMALS für auto-generierte Codes.
 function syncCodePermanentSpeichern(code) {
     localStorage.setItem(SYNC_CODE_PERMANENT_KEY, code);
     syncCodeSpeichern(code);
-    _swSyncCodeSenden(code);
     void einladungInDbSpeichern(code); // Einladungs-Eintrag aktuell halten
 }
 
@@ -94,18 +108,17 @@ async function einladungInDbSpeichern(code) {
 // ""            = neu, noch nicht festgelegt
 
 function geraetRolleLesen() {
-    return localStorage.getItem(SYNC_GERAET_ROLLE_KEY) || "";
+    return currentDeviceRole || "";
 }
 
 function geraetRolleSetzen(rolle) {
-    if (rolle) localStorage.setItem(SYNC_GERAET_ROLLE_KEY, rolle);
-    else localStorage.removeItem(SYNC_GERAET_ROLLE_KEY);
+    currentDeviceRole = istGueltigeGeraeteRolle(rolle) ? rolle : "";
     geraetRolleUiAktualisieren();
 }
 
 // Speichert die Rolle in Supabase – überlebt iOS-PWA-Install (localStorage-Isolation).
 async function geraetRolleInSupabaseSpeichern(rolle, syncCode) {
-    if (!supabaseClient || !rolle || !syncCode) return;
+    if (!supabaseClient || !istGueltigeGeraeteRolle(rolle) || !syncCode) return;
     try {
         if (!(await authSicherstellen())) return;
         await supabaseClient.from("device_roles").upsert({
@@ -116,23 +129,6 @@ async function geraetRolleInSupabaseSpeichern(rolle, syncCode) {
         }, { onConflict: "device_id" });
     } catch (err) {
         console.warn("Geräte-Rolle in Supabase speichern fehlgeschlagen:", err);
-    }
-}
-
-// Lädt die Rolle aus Supabase – Fallback wenn localStorage leer ist.
-async function geraetRolleAusSupabaseLaden() {
-    if (!supabaseClient) return null;
-    try {
-        if (!(await authSicherstellen())) return null;
-        const { data, error } = await supabaseClient
-            .from("device_roles")
-            .select("rolle")
-            .eq("device_id", geraeteIdLaden())
-            .single();
-        if (error || !data?.rolle) return null;
-        return String(data.rolle);
-    } catch (_) {
-        return null;
     }
 }
 
@@ -156,17 +152,76 @@ function geraetRolleUiAktualisieren() {
 }
 
 
-function _swSyncCodeSenden(code) {
+function _swInstallKontextSenden(context = {}) {
     if (!("serviceWorker" in navigator)) return;
     const ctrl = navigator.serviceWorker.controller;
+    const payload = {
+        type: "SET_INSTALL_CONTEXT",
+        joinToken: String(context.joinToken || ""),
+        code: String(context.code || "")
+    };
     if (ctrl) {
-        ctrl.postMessage({ type: "SET_SYNC_CODE", code });
+        ctrl.postMessage(payload);
         return;
     }
     // Falls SW noch nicht aktiv ist (erster Seitenaufruf): nach Bereitschaft warten
     navigator.serviceWorker.ready.then(reg => {
-        if (reg.active) reg.active.postMessage({ type: "SET_SYNC_CODE", code });
+        if (reg.active) reg.active.postMessage(payload);
     }).catch(() => {});
+}
+
+async function installKontextAktualisieren() {
+    if (!supabaseClient) return;
+    const rolle = geraetRolleLesen();
+    if (!istGueltigeGeraeteRolle(rolle) || !istGueltigerSyncCode(currentSyncCode)) return;
+    const nextKey = `${rolle}:${currentSyncCode}`;
+    if (currentInstallJoinToken && currentInstallContextKey === nextKey) {
+        _swInstallKontextSenden({ joinToken: currentInstallJoinToken, code: currentSyncCode });
+        return;
+    }
+    const joinToken = joinTokenErzeugen();
+    const saved = await joinTokenInSupabaseSpeichern(joinToken, rolle, currentSyncCode, {
+        createdByDeviceId: geraeteIdLaden(),
+        expiresInMs: 1000 * 60 * 60 * 24 * 30
+    });
+    if (!saved?.joinToken) return;
+    currentInstallJoinToken = saved.joinToken;
+    currentInstallContextKey = nextKey;
+    _swInstallKontextSenden({ joinToken: currentInstallJoinToken, code: currentSyncCode });
+}
+
+async function initialenGeraeteStatusErmitteln(options = {}) {
+    const deviceId = geraeteIdLaden();
+    const joinToken = String(options.joinToken || "").trim();
+    const legacyInviteDeviceId = String(options.legacyInviteDeviceId || "").trim();
+
+    if (supabaseClient) {
+        const bestehend = await geraetStatusAusSupabaseLaden(deviceId);
+        if (bestehend?.rolle && bestehend?.syncCode) return bestehend;
+
+        if (joinToken) {
+            const viaJoin = await geraetStatusMitJoinTokenRegistrieren(deviceId, joinToken);
+            if (viaJoin?.rolle && viaJoin?.syncCode) return viaJoin;
+        }
+
+        if (legacyInviteDeviceId) {
+            const legacyStatus = await gastStatusAusLegacyEinladungLaden(legacyInviteDeviceId);
+            if (legacyStatus?.syncCode) {
+                await geraetRolleInSupabaseSpeichern("gast", legacyStatus.syncCode);
+                return legacyStatus;
+            }
+        }
+    }
+
+    return null;
+}
+
+function zielRolleFuerCodeAnwenden(options = {}) {
+    const explicitRole = istGueltigeGeraeteRolle(options.targetRole) ? options.targetRole : "";
+    if (explicitRole) return explicitRole;
+    if (istGueltigeGeraeteRolle(currentDeviceRole)) return currentDeviceRole;
+    if (options.disableAutoRole) return "";
+    return options.userInitiated ? "gast" : "hauptgeraet";
 }
 
 function syncCodeLaden() {
@@ -222,6 +277,11 @@ async function syncCodeAnwenden(code, shouldReload = true, options = {}) {
     const allowOccupied = options.allowOccupied !== false;
     const userInitiated = options.userInitiated === true;
     const normalized = syncCodeNormalisieren(code);
+    const zielRolle = zielRolleFuerCodeAnwenden({
+        targetRole: options.targetRole,
+        userInitiated,
+        disableAutoRole: options.disableAutoRole === true
+    });
     if (!istGueltigerSyncCode(normalized)) {
         authStatusSetzen("Bitte Code im Format AAAA1234 eingeben.");
         if (userInitiated) syncBearbeitungsmodusSetzen(true);
@@ -255,7 +315,7 @@ async function syncCodeAnwenden(code, shouldReload = true, options = {}) {
             syncBearbeitungsmodusSetzen(false);
             syncDebugAktualisieren();
         }
-        _rolleNachCodeAnwenden(userInitiated); // Rolle auch ohne Netz setzen
+        geraetRolleSetzen(zielRolle);
         return;
     }
 
@@ -285,7 +345,7 @@ async function syncCodeAnwenden(code, shouldReload = true, options = {}) {
             if (btnSyncCodeDisplay) btnSyncCodeDisplay.textContent = currentSyncCode;
             authStatusSetzen(hint);
             if (userInitiated) syncBearbeitungsmodusSetzen(false);
-            _rolleNachCodeAnwenden(userInitiated);
+            geraetRolleSetzen(zielRolle);
             syncDebugAktualisieren();
         }
         return;
@@ -297,40 +357,14 @@ async function syncCodeAnwenden(code, shouldReload = true, options = {}) {
     if (btnSyncCodeDisplay) btnSyncCodeDisplay.textContent = currentSyncCode;
     authStatusSetzen(`Geraete-Code: ${currentSyncCode}`);
     eingabeFehlerSetzen("");
-    _rolleNachCodeAnwenden(userInitiated);
+    geraetRolleSetzen(zielRolle);
+    await geraetRolleInSupabaseSpeichern(zielRolle, currentSyncCode);
+    await installKontextAktualisieren();
     if (userInitiated) syncBearbeitungsmodusSetzen(false);
     if (syncCodeInput) syncCodeInput.blur();
     if (supabaseClient) echtzeitSyncStarten();
     syncDebugAktualisieren();
     if (shouldReload) void laden();
-}
-
-// Setzt oder bestätigt die Geräte-Rolle nach Code-Anwenden.
-// Sicherheitsregel: "einmal Gast, immer Gast" – Gast kann nie Hauptgerät werden.
-// Schreibt die finale Rolle in Supabase (überlebt iOS-PWA-localStorage-Isolation).
-function _rolleNachCodeAnwenden(userInitiated) {
-    const aktuelle = geraetRolleLesen();
-
-    let neueRolle;
-    if (userInitiated) {
-        neueRolle = "gast";
-    } else if (!aktuelle) {
-        neueRolle = "hauptgeraet";
-    } else {
-        neueRolle = aktuelle; // Bestehende Rolle beibehalten
-    }
-
-    // Sicherheitsregel: Gast kann sich niemals selbst zum Hauptgerät machen
-    if (aktuelle === "gast" && neueRolle !== "gast") neueRolle = "gast";
-
-    if (neueRolle !== aktuelle) {
-        geraetRolleSetzen(neueRolle);
-    } else {
-        geraetRolleUiAktualisieren();
-    }
-
-    // In Supabase persistieren – unabhängig von localStorage (iOS-PWA-Isolation)
-    void geraetRolleInSupabaseSpeichern(neueRolle, currentSyncCode);
 }
 
 async function syncCodeTeilen() {
@@ -340,15 +374,20 @@ async function syncCodeTeilen() {
     }
     const shareUrl = new URL(location.origin + location.pathname);
 
-    // Supabase verfügbar: Code in sync_invites speichern, URL enthält nur device_id.
-    // Vorteil: iOS-PWA liest beim Start device_id aus URL und holt aktuellen Code
-    // aus Supabase – kein localStorage-Transfer nötig, Code-Änderungen werden erkannt.
+    // Für neue Geräte wird ein serverseitiger Join-Token erstellt.
+    // Rolle und sync_code werden beim Start ausschliesslich aus Supabase geladen.
     if (supabaseClient) {
         try {
-            await einladungInDbSpeichern(currentSyncCode);
-            shareUrl.hash = "invite=" + geraeteIdLaden();
+            const joinToken = joinTokenErzeugen();
+            const gespeichert = await joinTokenInSupabaseSpeichern(joinToken, "gast", currentSyncCode, {
+                createdByDeviceId: geraeteIdLaden(),
+                expiresInMs: 1000 * 60 * 60 * 24 * 30
+            });
+            if (!gespeichert?.joinToken) throw new Error("JOIN_TOKEN_SAVE_FAILED");
+            shareUrl.hash = "join=" + gespeichert.joinToken;
         } catch (_) {
-            shareUrl.hash = "code=" + currentSyncCode; // Fallback
+            await einladungInDbSpeichern(currentSyncCode);
+            shareUrl.hash = "invite=" + geraeteIdLaden(); // Legacy-Fallback
         }
     } else {
         shareUrl.hash = "code=" + currentSyncCode; // Offline-Fallback
@@ -861,22 +900,26 @@ function syncEditorOeffnen() {
     syncBearbeitungsmodusSetzen(true);
 }
 
-function syncCodeUiEinrichten() {
+function syncCodeUiEinrichten(initOptions = {}) {
     if (!authBar) return Promise.resolve();
 
-    const initPromise = syncCodeLadenMitBackup()
-        .then(code => syncCodeAnwenden(code, false))
+    const initPromise = initialenGeraeteStatusErmitteln(initOptions)
+        .then(async status => {
+            const initialRole = status?.rolle || "";
+            const initialCode = status?.syncCode || await syncCodeLadenMitBackup();
+            const requiresServerRole = Boolean((initOptions.joinToken || initOptions.legacyInviteDeviceId) && !initialRole);
+            if (initialRole) geraetRolleSetzen(initialRole);
+            await syncCodeAnwenden(initialCode, false, {
+                targetRole: initialRole,
+                disableAutoRole: requiresServerRole
+            });
+        })
         .then(async () => {
             // Sicherstellen dass {device_id → sync_code} in sync_invites eingetragen ist.
             // Ermöglicht sofortiges Teilen ohne Wartezeit und stellt sicher dass
             // bestehende Geräte (Update von älterer Version) automatisch registriert werden.
             if (supabaseClient && currentSyncCode) void einladungInDbSpeichern(currentSyncCode);
-            // Fallback: Rolle aus Supabase laden wenn lokal noch leer
-            // (z. B. Geräte die vor Einführung der Rollen-Logik installiert wurden)
-            if (!geraetRolleLesen() && supabaseClient && currentSyncCode) {
-                const rolleAusDb = await geraetRolleAusSupabaseLaden();
-                if (rolleAusDb) geraetRolleSetzen(rolleAusDb);
-            }
+            if (supabaseClient && currentSyncCode) void installKontextAktualisieren();
             geraetRolleUiAktualisieren();
         })
         .catch(err => console.warn("Initialer Sync-Code fehlgeschlagen:", err));

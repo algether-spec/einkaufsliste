@@ -141,8 +141,105 @@ async function syncCodeRpcVerwenden(code, options = {}) {
     return data;
 }
 
+async function geraetStatusAusSupabaseLaden(deviceId) {
+    if (!supabaseClient || !deviceId) return null;
+    if (!(await authSicherstellen())) return null;
+    try {
+        const { data, error } = await supabaseClient
+            .from("device_roles")
+            .select("rolle, sync_code")
+            .eq("device_id", deviceId)
+            .maybeSingle();
+        if (error || !data?.rolle || !data?.sync_code) return null;
+        return {
+            rolle: String(data.rolle),
+            syncCode: String(data.sync_code)
+        };
+    } catch (err) {
+        console.warn("Geraetestatus-Lookup fehlgeschlagen:", err);
+        return null;
+    }
+}
+
+async function joinTokenInSupabaseSpeichern(joinToken, rolle, syncCode, options = {}) {
+    if (!supabaseClient || !joinToken || !rolle || !syncCode) return null;
+    if (!(await authSicherstellen())) return null;
+    try {
+        const expiresAt = Number.isFinite(options.expiresInMs)
+            ? new Date(Date.now() + options.expiresInMs).toISOString()
+            : null;
+        const payload = {
+            join_token: String(joinToken),
+            rolle: String(rolle),
+            sync_code: String(syncCode),
+            created_by_device_id: String(options.createdByDeviceId || geraeteIdLaden()),
+            updated_at: new Date().toISOString()
+        };
+        if (expiresAt) payload.expires_at = expiresAt;
+        const { error } = await supabaseClient
+            .from("device_join_tokens")
+            .upsert(payload, { onConflict: "join_token" });
+        if (error) throw error;
+        return {
+            joinToken: String(joinToken),
+            rolle: String(rolle),
+            syncCode: String(syncCode),
+            expiresAt
+        };
+    } catch (err) {
+        console.warn("Join-Token speichern fehlgeschlagen:", err);
+        return null;
+    }
+}
+
+async function joinTokenAusSupabaseLaden(joinToken) {
+    if (!supabaseClient || !joinToken) return null;
+    if (!(await authSicherstellen())) return null;
+    try {
+        const { data, error } = await supabaseClient
+            .from("device_join_tokens")
+            .select("rolle, sync_code, expires_at")
+            .eq("join_token", joinToken)
+            .maybeSingle();
+        if (error || !data?.rolle || !data?.sync_code) return null;
+        if (data.expires_at && new Date(data.expires_at).getTime() <= Date.now()) return null;
+        return {
+            rolle: String(data.rolle),
+            syncCode: String(data.sync_code),
+            expiresAt: data.expires_at ? String(data.expires_at) : ""
+        };
+    } catch (err) {
+        console.warn("Join-Token-Lookup fehlgeschlagen:", err);
+        return null;
+    }
+}
+
+async function geraetStatusMitJoinTokenRegistrieren(deviceId, joinToken) {
+    if (!supabaseClient || !deviceId || !joinToken) return null;
+    const joinData = await joinTokenAusSupabaseLaden(joinToken);
+    if (!joinData?.rolle || !joinData?.syncCode) return null;
+    try {
+        const { error } = await supabaseClient
+            .from("device_roles")
+            .upsert({
+                device_id: String(deviceId),
+                rolle: String(joinData.rolle),
+                sync_code: String(joinData.syncCode),
+                updated_at: new Date().toISOString()
+            }, { onConflict: "device_id" });
+        if (error) throw error;
+        return {
+            rolle: String(joinData.rolle),
+            syncCode: String(joinData.syncCode)
+        };
+    } catch (err) {
+        console.warn("Geraeteregistrierung via Join-Token fehlgeschlagen:", err);
+        return null;
+    }
+}
+
 // Liest den Sync-Code zu einer Geräte-ID aus der sync_invites-Tabelle.
-// Wird verwendet wenn ein Einladungs-Link (#invite=<device_id>) geöffnet wird.
+// Wird für Rückwärtskompatibilität mit älteren Einladungs-Links (#invite=<device_id>) verwendet.
 async function syncCodeAusEinladungLaden(deviceId) {
     if (!supabaseClient || !deviceId) return null;
     if (!(await authSicherstellen())) return null;
@@ -158,6 +255,15 @@ async function syncCodeAusEinladungLaden(deviceId) {
         console.warn("Einladungs-Lookup fehlgeschlagen:", err);
         return null;
     }
+}
+
+async function gastStatusAusLegacyEinladungLaden(deviceId) {
+    const syncCode = await syncCodeAusEinladungLaden(deviceId);
+    if (!syncCode) return null;
+    return {
+        rolle: "gast",
+        syncCode: String(syncCode)
+    };
 }
 
 async function syncCodeNutzungAktualisieren(code) {

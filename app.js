@@ -14,7 +14,8 @@ if (btnMic && !SpeechRecognitionCtor) {
 }
 
 const _hashParams = new URLSearchParams(location.hash.slice(1));
-// Einladungs-Link: #invite=<device_id> → Code aus Supabase laden (nach Init)
+const _joinToken = _hashParams.get("join");
+// Legacy-Einladungs-Link: #invite=<device_id> → Code aus Supabase laden
 const _inviteDeviceId = _hashParams.get("invite");
 // Rückwärtskompatibilität: #code=XXXX oder ?code=XXXX (ältere geteilte Links)
 const _rawHashCode = _hashParams.get("code");
@@ -32,7 +33,11 @@ const _hatVorherigenCode = istGueltigerSyncCode(_preExistingCode) && !istReservi
 const _urlCodeGueltig = istGueltigerSyncCode(_normalizedUrlCode);
 
 // #code= Auto-Anwenden nur wenn KEIN permanenter Code vorhanden und Code nicht reserviert
-const _urlCodeAutoAnwenden = _urlCodeGueltig && !istReservierterSyncCode(_normalizedUrlCode) && !_hatVorherigenCode && !_inviteDeviceId;
+const _urlCodeAutoAnwenden = _urlCodeGueltig
+    && !istReservierterSyncCode(_normalizedUrlCode)
+    && !_hatVorherigenCode
+    && !_joinToken
+    && !_inviteDeviceId;
 
 if (_urlCodeAutoAnwenden) {
     syncCodePermanentSpeichern(_normalizedUrlCode);
@@ -48,64 +53,12 @@ if (_hasQueryToClean) {
     history.replaceState(null, "", _cleanUrl.toString());
 }
 
-// Kritischer Fix für iOS-PWA-localStorage-Isolation:
-// #invite=<device_id> in der URL ist das einzige zuverlässige Signal dass
-// dieses Gerät ein Gast ist – auch nach PWA-Install mit frischem localStorage.
-// Muss VOR syncCodeUiEinrichten gesetzt werden damit _rolleNachCodeAnwenden
-// nicht fälschlicherweise "hauptgeraet" setzt.
-// Eigene Invite-URL (Hauptgerät öffnet seinen eigenen Link) wird ignoriert.
-if (_inviteDeviceId && _inviteDeviceId !== geraeteIdLaden()) {
-    geraetRolleSetzen("gast");
-}
+const _initPromise = syncCodeUiEinrichten({
+    joinToken: _joinToken,
+    legacyInviteDeviceId: _inviteDeviceId
+});
 
-const _initPromise = syncCodeUiEinrichten();
-
-// #invite=<device_id>: Code aus Supabase laden und anwenden / Konflikt-Dialog zeigen.
-// Funktioniert unabhängig von localStorage-Isolation zwischen Safari und PWA auf iOS:
-// Die device_id bleibt in der URL, der aktuelle Code wird immer frisch aus Supabase gelesen.
-if (_inviteDeviceId && supabaseClient) {
-    Promise.resolve(_initPromise).then(async () => {
-        authStatusSetzen("Einladung wird geladen...");
-        const inviteCode = await syncCodeAusEinladungLaden(_inviteDeviceId);
-        if (!inviteCode) {
-            authStatusSetzen("Einladung nicht gefunden. Bitte direkt einen Code eingeben.");
-            return;
-        }
-        const _normalizedInvite = syncCodeNormalisieren(inviteCode);
-        if (!istGueltigerSyncCode(_normalizedInvite) || istReservierterSyncCode(_normalizedInvite)) return;
-
-        // Bereits auf diesem Code → kein Dialog nötig
-        if (_normalizedInvite === currentSyncCode) {
-            authStatusSetzen(`Geraete-Code: ${currentSyncCode}`);
-            return;
-        }
-
-        // Gast mit korrektem permanenten Code → bereits verbunden, nichts tun.
-        // NICHT: blanket return für alle Gäste – frische PWA hat auto-generierten Code
-        // als permanenten Code gespeichert, der ≠ Einladungs-Code ist.
-        if (geraetRolleLesen() === "gast") {
-            const _permanentCodeGast = syncCodeNormalisieren(
-                localStorage.getItem(SYNC_CODE_PERMANENT_KEY) || ""
-            );
-            if (_permanentCodeGast === _normalizedInvite) return;
-            // Permanenter Code stimmt nicht (z.B. frische PWA) → Einladungs-Code anwenden
-        }
-
-        if (!currentSyncCode || !istGueltigerSyncCode(currentSyncCode) || geraetRolleLesen() === "gast") {
-            // Kein gültiger Code ODER Gast-Gerät ohne korrekten permanenten Code
-            // → Einladungs-Code direkt übernehmen (Erstinstall / frische PWA)
-            localStorage.setItem(SYNC_INVITE_DEVICE_KEY, _inviteDeviceId);
-            geraetRolleSetzen("gast");
-            await syncCodeAnwenden(_normalizedInvite, true, { allowOccupied: true });
-        } else {
-            // Bestehender Code weicht ab → Konflikt-Dialog anzeigen
-            localStorage.setItem(SYNC_INVITE_DEVICE_KEY, _inviteDeviceId);
-            if (syncCodeInput) syncCodeInput.value = _normalizedInvite;
-            syncBearbeitungsmodusSetzen(true);
-            authStatusSetzen(`Einladung: Code ${_normalizedInvite} – Verbinden zum Beitreten.`);
-        }
-    });
-} else if (_urlCodeGueltig && _hatVorherigenCode && _preExistingCode !== _normalizedUrlCode && !_urlCodeAutoAnwenden) {
+if (_urlCodeGueltig && _hatVorherigenCode && _preExistingCode !== _normalizedUrlCode && !_urlCodeAutoAnwenden) {
     // Rückwärtskompatibilität #code=: Konflikt-Dialog für echte neue Links
     const _installUrlCode = syncCodeNormalisieren(localStorage.getItem(SYNC_CODE_INSTALL_URL_KEY) || "");
     if (_installUrlCode !== _normalizedUrlCode) {
@@ -141,8 +94,12 @@ if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("service-worker.js?v=" + APP_VERSION, { updateViaCache: "none" });
     navigator.serviceWorker.ready.then(reg => {
         const _swCode = localStorage.getItem(SYNC_CODE_PERMANENT_KEY) || localStorage.getItem(SYNC_CODE_KEY);
-        if (_swCode && reg.active) {
-            reg.active.postMessage({ type: "SET_SYNC_CODE", code: _swCode });
+        if ((_joinToken || _swCode) && reg.active) {
+            reg.active.postMessage({
+                type: "SET_INSTALL_CONTEXT",
+                joinToken: _joinToken || "",
+                code: _swCode || ""
+            });
         }
     }).catch(() => {});
 }

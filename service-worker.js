@@ -1,13 +1,13 @@
-const CACHE_VERSION = "v1.0.137";
+const CACHE_VERSION = "v1.0.138";
 const CACHE_NAME = "einkaufsliste-" + CACHE_VERSION;
 
 // Separater Cache ohne Versionsnummer – überlebt SW-Updates.
-// Speichert den aktuellen Sync-Code für die dynamische Manifest-Injektion.
+// Speichert den aktuellen Install-Kontext für die dynamische Manifest-Injektion.
 const HANDOFF_CACHE = "einkaufsliste-handoff";
-const HANDOFF_KEY = "/__sync_code__";
+const HANDOFF_KEY = "/__install_context__";
 
 // Im Speicher (geht verloren wenn iOS den SW beendet, daher Cache als Backup)
-let _manifestSyncCode = null;
+let _manifestInstallContext = null;
 
 const FILES_TO_CACHE = [
   "./",
@@ -56,36 +56,40 @@ self.addEventListener("message", event => {
   if (event.data?.type === "SKIP_WAITING") {
     self.skipWaiting();
   }
-  if (event.data?.type === "SET_SYNC_CODE" && event.data.code) {
-    _manifestSyncCode = event.data.code;
+  if (event.data?.type === "SET_INSTALL_CONTEXT") {
+    _manifestInstallContext = {
+      joinToken: String(event.data.joinToken || ""),
+      code: String(event.data.code || "")
+    };
     // Persistent speichern – überlebt SW-Neustarts
     caches.open(HANDOFF_CACHE).then(cache =>
-      cache.put(HANDOFF_KEY, new Response(event.data.code, {
-        headers: { "Content-Type": "text/plain" }
+      cache.put(HANDOFF_KEY, new Response(JSON.stringify(_manifestInstallContext), {
+        headers: { "Content-Type": "application/json" }
       }))
     ).catch(() => {});
   }
 });
 
-// Code aus dem Cache lesen (Fallback wenn SW neu gestartet wurde)
-async function handoffCodeLesen() {
-  if (_manifestSyncCode) return _manifestSyncCode;
+// Install-Kontext aus dem Cache lesen (Fallback wenn SW neu gestartet wurde)
+async function handoffKontextLesen() {
+  if (_manifestInstallContext) return _manifestInstallContext;
   try {
     const cache = await caches.open(HANDOFF_CACHE);
     const res = await cache.match(HANDOFF_KEY);
     if (res) {
-      _manifestSyncCode = await res.text();
-      return _manifestSyncCode;
+      _manifestInstallContext = await res.json();
+      return _manifestInstallContext;
     }
   } catch (_) {}
   return null;
 }
 
-// Manifest dynamisch mit aktuellem Sync-Code ausliefern.
+// Manifest dynamisch mit aktuellem Install-Kontext ausliefern.
 // Wenn iOS beim "Zum Homescreen hinzufügen" das Manifest liest, enthält
-// start_url den Code → PWA startet immer mit dem richtigen Code.
-async function manifestMitCodeAusliefern(request) {
-  const code = await handoffCodeLesen();
+// start_url einen Join-Token, damit die installierte PWA Rolle und Code
+// wieder aus Supabase laden kann.
+async function manifestMitKontextAusliefern(request) {
+  const context = await handoffKontextLesen();
   let response;
   try {
     response = await fetch(request.url);
@@ -94,10 +98,14 @@ async function manifestMitCodeAusliefern(request) {
     if (cached) response = cached;
   }
   if (!response) return new Response("Not found", { status: 404 });
-  if (!code) return response;
+  if (!context?.joinToken && !context?.code) return response;
   try {
     const manifest = await response.json();
-    manifest.start_url = "./#code=" + code;
+    if (context?.joinToken) {
+      manifest.start_url = "./#join=" + encodeURIComponent(context.joinToken);
+    } else if (context?.code) {
+      manifest.start_url = "./#code=" + context.code;
+    }
     return new Response(JSON.stringify(manifest), {
       headers: {
         "Content-Type": "application/manifest+json",
@@ -117,9 +125,9 @@ self.addEventListener("fetch", event => {
   const cacheKeyByPath = requestUrl.pathname === "/" ? "./index.html" : `.${requestUrl.pathname}`;
 
   // Manifest dynamisch ausliefern – immer vor dem Cache-Lookup,
-  // damit start_url den aktuellen Code enthält (für PWA-Homescreen-Install).
+  // damit start_url den aktuellen Install-Kontext enthält (für PWA-Homescreen-Install).
   if (sameOrigin && requestUrl.pathname.endsWith("/manifest.json")) {
-    event.respondWith(manifestMitCodeAusliefern(request));
+    event.respondWith(manifestMitKontextAusliefern(request));
     return;
   }
 

@@ -9,7 +9,7 @@ const APP_CONFIG = window.APP_CONFIG || {};
    KONSTANTEN
 ====================== */
 
-const APP_VERSION = "1.0.137";
+const APP_VERSION = "1.0.138";
 const STORAGE_KEY = "einkaufsliste";
 const SUPABASE_TABLE = "shopping_items";
 const SYNC_CODE_KEY = "einkaufsliste-sync-code";
@@ -19,13 +19,6 @@ const SYNC_CODE_PERMANENT_KEY = "einkaufsliste-sync-code-permanent";
 // Speichert den URL-Code der beim ersten Install gesetzt wurde.
 // Wird genutzt um den Install-URL-Code von echten neuen geteilten Links zu unterscheiden.
 const SYNC_CODE_INSTALL_URL_KEY = "einkaufsliste-install-url-code";
-// Speichert die device_id des zuletzt angewandten Einladungs-Links.
-// Verhindert wiederholte Konflikt-Dialoge bei PWA-Neustarts mit derselben Invite-URL.
-const SYNC_INVITE_DEVICE_KEY = "einkaufsliste-invite-device-id";
-// Geräte-Rolle: "hauptgeraet" (eigener Code, kann teilen) |
-//               "gast" (Code von anderem Gerät, nur lesen/bearbeiten) |
-//               "" (neu, noch nicht festgelegt → zeigt Verbinden)
-const SYNC_GERAET_ROLLE_KEY = "einkaufsliste-geraet-rolle";
 const SYNC_META_PREFIX = "einkaufsliste-sync-meta:";
 const DEVICE_ID_KEY = "einkaufsliste-device-id";
 
