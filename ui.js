@@ -204,6 +204,7 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId(), _batc
     li.addEventListener("pointerdown", e => {
         if (modus !== MODUS_EINKAUFEN) return;
         e.preventDefault();
+        li.setPointerCapture(e.pointerId); // Finger-Bewegung außerhalb verhindert kein Cancel
         cancelLongPress();
 
         const timers = { start: null, activate: null };
@@ -228,9 +229,9 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId(), _batc
         }, 1000);
     });
 
+    // pointerleave entfernt – setPointerCapture verhindert Fehlauslösungen
     li.addEventListener("pointerup",     cancelLongPress);
     li.addEventListener("pointercancel", cancelLongPress);
-    li.addEventListener("pointerleave",  cancelLongPress);
     li.addEventListener("contextmenu",   e => e.preventDefault());
 
     if (_batchTarget) {
