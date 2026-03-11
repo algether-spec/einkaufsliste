@@ -37,6 +37,15 @@ Diese Regeln gelten verbindlich für **Einkaufsliste** und **Erinnerungen**.
 - Kommentare nur dort wo nötig
 - HTML, CSS und JavaScript sauber trennen
 
+## Qualität und Sicherheit
+
+- Eingaben prüfen
+- Leere Einträge verhindern
+- Fehler verständlich anzeigen
+- Keine Secrets im Frontend speichern
+- Löschen nur gezielt ausführen
+- Datenverlust vermeiden
+
 ## Merge zu main
 
 1. Preview-URL auf dem Handy testen
