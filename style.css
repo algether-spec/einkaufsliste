@@ -499,10 +499,10 @@ body.modus-einkaufen #liste li {
 }
 
 #liste li.erledigt {
-    border-left-color: var(--done);
-    color: var(--done);
+    border-left-color: #f87171;
+    background: #fee2e2;
+    color: #9ca3af;
     text-decoration: line-through;
-    opacity: 0.5;
 }
 
 .list-photo-item {
