@@ -460,27 +460,39 @@ body.modus-einkaufen #liste li {
     list-style: none;
     padding: 0;
     margin: 0;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
+    display: block;
 }
 
 #liste li {
     background: white;
-    padding: 12px 10px;
+    padding: 5px 12px;
     border-radius: 14px;
-    min-height: 64px;
+    margin-bottom: 4px;
+    width: 100%;
     display: flex;
     align-items: center;
-    justify-content: center;
-    text-align: center;
     box-shadow: 0 2px 4px rgba(0,0,0,0.04);
     border-left: 6px solid var(--primary);
     font-size: 16px;
     word-break: break-word;
 }
 
-#liste li.foto-eintrag {
+/* Einkaufen-Modus: 2-Spalten Grid, größere Tippfläche, zentrierter Text */
+.modus-einkaufen #liste {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.modus-einkaufen #liste li {
+    padding: 12px 10px;
+    min-height: 64px;
+    margin-bottom: 0;
+    justify-content: center;
+    text-align: center;
+}
+
+.modus-einkaufen #liste li.foto-eintrag {
     grid-column: 1 / -1;
     justify-content: flex-start;
     text-align: left;
