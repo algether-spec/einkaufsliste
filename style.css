@@ -409,6 +409,19 @@ button:disabled {
     font-size: 12px;
     font-weight: 700;
     margin-left: auto;
+    transition: background 0.3s, border-color 0.3s, color 0.3s;
+}
+
+.update-button.update-available {
+    background: #16a34a;
+    border-color: #15803d;
+    color: #fff;
+    animation: update-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes update-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(22,163,74,0.5); }
+    50%       { box-shadow: 0 0 0 6px rgba(22,163,74,0); }
 }
 
 .sync-status {

@@ -823,6 +823,7 @@ async function updateErzwingen() {
     }
 
     if (btnForceUpdate) btnForceUpdate.disabled = true;
+    updateButtonVerfuegbarSetzen(false);
     syncStatusSetzen("Update: wird angewendet...", "warn");
 
     try {
@@ -878,26 +879,21 @@ async function hatWartendesUpdate() {
     return false;
 }
 
+function updateButtonVerfuegbarSetzen(verfuegbar) {
+    if (!btnForceUpdate) return;
+    btnForceUpdate.classList.toggle("update-available", verfuegbar);
+}
+
 async function autoUpdatePruefen(trigger = "auto") {
     if (updateLaeuft) return;
 
     try {
         const hasUpdate = await hatWartendesUpdate();
+        updateButtonVerfuegbarSetzen(hasUpdate);
         if (!hasUpdate) return;
-
-        if (hatAktiveBearbeitung()) {
-            syncStatusSetzen("Update verfuegbar", "warn");
-            authStatusSetzen("Neue Version erkannt. Bei Leerlauf wird automatisch aktualisiert.");
-            return;
-        }
-
-        updateLaeuft = true;
-        authStatusSetzen(`Neue Version erkannt (${trigger}). Update startet...`);
-        await updateErzwingen();
+        syncStatusSetzen("Update verfuegbar", "warn");
     } catch (err) {
         console.warn("Auto-Update-Pruefung fehlgeschlagen:", err);
-    } finally {
-        updateLaeuft = false;
     }
 }
 
