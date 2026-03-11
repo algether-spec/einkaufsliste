@@ -884,14 +884,26 @@ function updateButtonVerfuegbarSetzen(verfuegbar) {
     btnForceUpdate.classList.toggle("update-available", verfuegbar);
 }
 
-async function autoUpdatePruefen(trigger = "auto") {
+async function serverVersionLaden() {
+    try {
+        const res = await fetch(`./version.json?t=${Date.now()}`, { cache: "no-store" });
+        if (!res.ok) return null;
+        const data = await res.json();
+        return String(data.version || "").trim();
+    } catch {
+        return null;
+    }
+}
+
+async function autoUpdatePruefen() {
     if (updateLaeuft) return;
 
     try {
-        const hasUpdate = await hatWartendesUpdate();
+        const serverVersion = await serverVersionLaden();
+        if (!serverVersion) return;
+        const hasUpdate = serverVersion !== APP_VERSION;
         updateButtonVerfuegbarSetzen(hasUpdate);
-        if (!hasUpdate) return;
-        syncStatusSetzen("Update verfuegbar", "warn");
+        if (hasUpdate) syncStatusSetzen("Update verfuegbar", "warn");
     } catch (err) {
         console.warn("Auto-Update-Pruefung fehlgeschlagen:", err);
     }

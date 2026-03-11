@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v1.0.152";
+const CACHE_VERSION = "v1.0.153";
 const CACHE_NAME = "einkaufsliste-" + CACHE_VERSION;
 
 // Separater Cache ohne Versionsnummer – überlebt SW-Updates.
@@ -129,6 +129,12 @@ self.addEventListener("fetch", event => {
   const requestUrl = new URL(request.url);
   const sameOrigin = requestUrl.origin === self.location.origin;
   const cacheKeyByPath = requestUrl.pathname === "/" ? "./index.html" : `.${requestUrl.pathname}`;
+
+  // version.json immer frisch vom Netz – nie aus Cache
+  if (sameOrigin && requestUrl.pathname.endsWith("/version.json")) {
+    event.respondWith(fetch(request).catch(() => new Response("{}", { headers: { "Content-Type": "application/json" } })));
+    return;
+  }
 
   // Manifest dynamisch ausliefern – immer vor dem Cache-Lookup,
   // damit start_url den aktuellen Install-Kontext enthält (für PWA-Homescreen-Install).
