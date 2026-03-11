@@ -475,6 +475,9 @@ body.modus-einkaufen #liste li {
     border-left: 6px solid var(--primary);
     font-size: 16px;
     word-break: break-word;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
 }
 
 /* Einkaufen-Modus: 2-Spalten Grid, größere Tippfläche, zentrierter Text */
@@ -512,7 +515,7 @@ body.modus-einkaufen #liste li {
     left: 0;
     height: 3px;
     background: #f87171;
-    animation: pending-progress 2s linear forwards;
+    animation: pending-progress 1s linear forwards;
 }
 
 @keyframes pending-progress {

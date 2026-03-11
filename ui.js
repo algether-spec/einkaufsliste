@@ -70,7 +70,7 @@ function eingabeFehlerSetzen(text) {
 
 /* --- Listen-Rendering ------------------------------------------- */
 
-const pendingTimers = new WeakMap();
+const longPressTimers = new WeakMap(); // { start: timerId, activate: timerId }
 
 function datenAusListeLesen() {
     const daten = [];
@@ -192,36 +192,46 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId(), _batc
 
     if (erledigt) li.classList.add("erledigt");
 
-    li.onclick = () => {
-        if (modus !== MODUS_EINKAUFEN) return;
-
-        // Erledigt → rückgängig
-        if (li.classList.contains("erledigt")) {
-            li.classList.remove("erledigt");
-            listeNachGruppenSortieren();
-            speichern();
-            return;
-        }
-
-        // Pending → abbrechen
-        if (li.classList.contains("pending")) {
-            clearTimeout(pendingTimers.get(li));
-            pendingTimers.delete(li);
-            li.classList.remove("pending");
-            return;
-        }
-
-        // Normal → 2-Sekunden-Countdown starten
-        li.classList.add("pending");
-        const timer = setTimeout(() => {
-            pendingTimers.delete(li);
-            li.classList.remove("pending");
-            li.classList.add("erledigt");
-            listeNachGruppenSortieren();
-            speichern();
-        }, 2000);
-        pendingTimers.set(li, timer);
+    const cancelLongPress = () => {
+        const timers = longPressTimers.get(li);
+        if (!timers) return;
+        clearTimeout(timers.start);
+        clearTimeout(timers.activate);
+        longPressTimers.delete(li);
+        li.classList.remove("pending");
     };
+
+    li.addEventListener("pointerdown", e => {
+        if (modus !== MODUS_EINKAUFEN) return;
+        e.preventDefault();
+        cancelLongPress();
+
+        const timers = { start: null, activate: null };
+        longPressTimers.set(li, timers);
+
+        timers.start = setTimeout(() => {
+            if (!longPressTimers.has(li)) return;
+            li.classList.add("pending");
+
+            timers.activate = setTimeout(() => {
+                if (!longPressTimers.has(li)) return;
+                longPressTimers.delete(li);
+                li.classList.remove("pending");
+                if (li.classList.contains("erledigt")) {
+                    li.classList.remove("erledigt");
+                } else {
+                    li.classList.add("erledigt");
+                }
+                listeNachGruppenSortieren();
+                speichern();
+            }, 1000);
+        }, 1000);
+    });
+
+    li.addEventListener("pointerup",     cancelLongPress);
+    li.addEventListener("pointercancel", cancelLongPress);
+    li.addEventListener("pointerleave",  cancelLongPress);
+    li.addEventListener("contextmenu",   e => e.preventDefault());
 
     if (_batchTarget) {
         _batchTarget.appendChild(li);
