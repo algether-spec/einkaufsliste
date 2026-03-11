@@ -28,6 +28,15 @@ Diese Regeln gelten verbindlich für **Einkaufsliste** und **Erinnerungen**.
 - Typen: `feat`, `fix`, `refactor`, `test`, `docs`
 - Beispiel: `fix(sync): Polling läuft immer als Fallback + v1.0.144`
 
+## Code-Qualität
+
+- Funktionsnamen auf Englisch
+- Code einfach und gut lesbar halten
+- Kurze Funktionen bevorzugen (max. 20–30 Zeilen)
+- Wiederholungen vermeiden (DRY-Prinzip)
+- Kommentare nur dort wo nötig
+- HTML, CSS und JavaScript sauber trennen
+
 ## Merge zu main
 
 1. Preview-URL auf dem Handy testen
