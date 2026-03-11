@@ -70,6 +70,8 @@ function eingabeFehlerSetzen(text) {
 
 /* --- Listen-Rendering ------------------------------------------- */
 
+const pendingTimers = new WeakMap();
+
 function datenAusListeLesen() {
     const daten = [];
     liste.querySelectorAll("li").forEach((li, index) => {
@@ -192,9 +194,33 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId(), _batc
 
     li.onclick = () => {
         if (modus !== MODUS_EINKAUFEN) return;
-        li.classList.toggle("erledigt");
-        listeNachGruppenSortieren();
-        speichern();
+
+        // Erledigt → rückgängig
+        if (li.classList.contains("erledigt")) {
+            li.classList.remove("erledigt");
+            listeNachGruppenSortieren();
+            speichern();
+            return;
+        }
+
+        // Pending → abbrechen
+        if (li.classList.contains("pending")) {
+            clearTimeout(pendingTimers.get(li));
+            pendingTimers.delete(li);
+            li.classList.remove("pending");
+            return;
+        }
+
+        // Normal → 2-Sekunden-Countdown starten
+        li.classList.add("pending");
+        const timer = setTimeout(() => {
+            pendingTimers.delete(li);
+            li.classList.remove("pending");
+            li.classList.add("erledigt");
+            listeNachGruppenSortieren();
+            speichern();
+        }, 2000);
+        pendingTimers.set(li, timer);
     };
 
     if (_batchTarget) {

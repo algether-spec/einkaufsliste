@@ -498,6 +498,28 @@ body.modus-einkaufen #liste li {
     text-align: left;
 }
 
+#liste li.pending {
+    background: #fee2e2;
+    border-left-color: #f87171;
+    position: relative;
+    overflow: hidden;
+}
+
+#liste li.pending::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 3px;
+    background: #f87171;
+    animation: pending-progress 2s linear forwards;
+}
+
+@keyframes pending-progress {
+    from { width: 0%; }
+    to   { width: 100%; }
+}
+
 #liste li.erledigt {
     border-left-color: #f87171;
     background: #fee2e2;
