@@ -195,7 +195,6 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId(), _batc
     const cancelLongPress = () => {
         const timers = longPressTimers.get(li);
         if (!timers) return;
-        clearTimeout(timers.start);
         clearTimeout(timers.activate);
         longPressTimers.delete(li);
         li.classList.remove("pending");
@@ -207,26 +206,24 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId(), _batc
         li.setPointerCapture(e.pointerId); // Finger-Bewegung außerhalb verhindert kein Cancel
         cancelLongPress();
 
-        const timers = { start: null, activate: null };
+        const timers = { activate: null };
         longPressTimers.set(li, timers);
 
-        timers.start = setTimeout(() => {
-            if (!longPressTimers.has(li)) return;
-            li.classList.add("pending");
+        // Sofort pending zeigen, nach 500ms auslösen
+        li.classList.add("pending");
 
-            timers.activate = setTimeout(() => {
-                if (!longPressTimers.has(li)) return;
-                longPressTimers.delete(li);
-                li.classList.remove("pending");
-                if (li.classList.contains("erledigt")) {
-                    li.classList.remove("erledigt");
-                } else {
-                    li.classList.add("erledigt");
-                }
-                listeNachGruppenSortieren();
-                speichern();
-            }, 1000);
-        }, 1000);
+        timers.activate = setTimeout(() => {
+            if (!longPressTimers.has(li)) return;
+            longPressTimers.delete(li);
+            li.classList.remove("pending");
+            if (li.classList.contains("erledigt")) {
+                li.classList.remove("erledigt");
+            } else {
+                li.classList.add("erledigt");
+            }
+            listeNachGruppenSortieren();
+            speichern();
+        }, 500);
     });
 
     // pointerleave entfernt – setPointerCapture verhindert Fehlauslösungen
