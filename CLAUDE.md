@@ -46,6 +46,15 @@ Diese Regeln gelten verbindlich für **Einkaufsliste** und **Erinnerungen**.
 - Löschen nur gezielt ausführen
 - Datenverlust vermeiden
 
+## Arbeitsweise
+
+- Arbeite Schritt für Schritt
+- Ändere nur, was für die aktuelle Aufgabe nötig ist
+- Zerstöre keine bestehenden Funktionen
+- Vermeide unnötige Komplett-Umbauten
+- Halte die Lösung einfach und robust
+- Baue zuerst die Grundfunktionen, danach Erweiterungen
+
 ## Merge zu main
 
 1. Preview-URL auf dem Handy testen
