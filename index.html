@@ -8,7 +8,7 @@
     <!-- S3: Content Security Policy -->
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'self';
-        script-src 'self' https://cdn.jsdelivr.net;
+        script-src 'self';
         connect-src 'self' https://*.supabase.co wss://*.supabase.co;
         img-src 'self' data: blob:;
         style-src 'self';
@@ -25,10 +25,10 @@
     <meta name="application-name" content="Einkaufen">
 
     <!-- Styles -->
-    <link rel="stylesheet" href="style.css?v=1.0.119">
+    <link rel="stylesheet" href="style.css?v=1.0.125">
 
     <!-- Manifest -->
-    <link rel="manifest" href="manifest.json?v=1.0.119">
+    <link rel="manifest" href="manifest.json?v=1.0.125">
     <link rel="icon" type="image/png" sizes="192x192" href="icon-cart-192.png">
     <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon-180.png">
 </head>
@@ -44,17 +44,19 @@
 
 <div class="app">
 
-    <header>Einkaufen</header>
+    <header>
+        <span class="header-title">Einkaufen</span>
+        <button type="button" id="btn-help" class="help-button" title="Hilfe">❓</button>
+    </header>
 
     <div class="sync-code-compact" id="sync-code-compact">
         <div class="sync-code-row">
             <span class="sync-code-label">Code:</span>
             <button type="button" id="btn-sync-code-display" class="sync-code-display">HELP0000</button>
             <button type="button" id="btn-sync-code-share" class="sync-code-share">Teilen</button>
-            <button type="button" id="btn-sync-code-edit" class="sync-code-edit">Ändern</button>
+            <button type="button" id="btn-sync-connect" class="sync-code-edit">Verbinden</button>
             <button type="button" id="btn-force-update" class="update-button">Update</button>
         </div>
-        <div class="sync-code-hint">Hinweis: Code HELP0000 oeffnet nur die Kurzanleitung.</div>
     </div>
 
     <div class="auth-bar" id="auth-bar" hidden>
@@ -64,7 +66,6 @@
             class="auth-email"
             placeholder="Geräte-Code (z. B. LUIS0090)">
         <button type="button" id="btn-sync-apply" class="auth-button">Verbinden</button>
-        <button type="button" id="btn-sync-new" class="auth-button auth-logout">Neu</button>
         <div id="auth-status" class="auth-status"></div>
     </div>
 
@@ -129,20 +130,49 @@
         <div class="help-card">
             <button type="button" id="btn-help-viewer-close" class="help-close">Schließen</button>
             <h2>Kurzanleitung</h2>
-            <ol>
-                <li>App einmal installieren und danach als App öffnen (PWA).</li>
-                <li>Auf beiden Handys denselben Geräte-Code im Format AAAA1234 eingeben.</li>
-                <li><strong>Text:</strong> In das Feld schreiben, dann <strong>Übernehmen</strong>.</li>
-                <li><strong>Sprache:</strong> Auf <strong>🎤</strong> tippen, Text prüfen, dann <strong>Übernehmen</strong>.</li>
-                <li><strong>Bild:</strong> Auf <strong>Foto</strong> tippen; das Foto wird sofort gespeichert.</li>
-                <li>Im Modus <strong>Einkaufen</strong> Artikel antippen, um sie abzuhaken.</li>
-                <li>Code <strong>HELP0000</strong> ist nur für diese Kurzanleitung reserviert.</li>
-            </ol>
+
+            <div class="help-section">
+                <div class="help-section-title">🔄 Installation &amp; Teilen</div>
+                <ul class="help-list">
+                    <li>Das erste Gerät wird automatisch <strong>Hauptgerät</strong></li>
+                    <li>Hauptgerät: auf <strong>🔗 Teilen</strong> tippen → Link erzeugen &amp; ans andere Gerät senden</li>
+                    <li>Gastgerät: Link öffnen → automatisch beigetreten, kein Code nötig</li>
+                    <li>Immer zu Homebildschirm hinzufügen – danach ist es eine WebApp</li>
+                </ul>
+            </div>
+
+            <div class="help-section">
+                <div class="help-section-title">🎤 Mikrofon</div>
+                <ul class="help-list">
+                    <li>Auf <strong>🎤</strong> tippen, um Spracherkennung zu starten (beim ersten Mal zulassen)</li>
+                    <li>Text im Eingabefeld prüfen</li>
+                    <li>Mit <strong>✅ Übernehmen</strong> zur Liste hinzufügen</li>
+                </ul>
+            </div>
+
+            <div class="help-section">
+                <div class="help-section-title">📱 Buttons</div>
+                <ul class="help-list">
+                    <li><strong>🗑️ Löschen</strong> – Eingabefeld leeren</li>
+                    <li><strong>✅ Übernehmen</strong> – Artikel zur Liste hinzufügen</li>
+                    <li><strong>📷 Foto</strong> – Foto aufnehmen, Text dazu fügen möglich</li>
+                    <li><strong>📤 Export</strong> – Liste als Text in die Zwischenablage kopieren</li>
+                </ul>
+            </div>
+
+            <div class="help-section">
+                <div class="help-section-title">🛒 Erfassen &amp; Einkaufen</div>
+                <ul class="help-list">
+                    <li><strong>Erfassen</strong> – Artikel eingeben und zur Liste hinzufügen</li>
+                    <li><strong>Einkaufen</strong> – Artikel antippen um sie abzuhaken</li>
+                    <li>Abgehakte Artikel werden beim Wechsel auf Erfassen gelöscht</li>
+                </ul>
+            </div>
         </div>
     </div>
 
     <div class="version-row">
-        <div class="version-badge" id="version-badge">v1.0.115</div>
+        <div class="version-badge" id="version-badge">v1.0.125</div>
     </div>
     <div class="version-subline">von Al.Gether</div>
     <div class="sync-status" id="sync-status">Sync: Lokal</div>
@@ -160,14 +190,13 @@
 
 </div>
 
-<script src="config.js?v=1.0.119"></script>
-<script src="utils.js?v=1.0.119"></script>
-<!-- S2: Supabase auf feste Version gepinnt + SRI-Hash -->
-<script
-    src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.98.0/dist/umd/supabase.js"
-    integrity="sha384-NRo2jhGGHu91p1IOcVC3UWI5Vnd+xGXfD/8N7Hr9+aGTK0d/Pl0i+kUZsB/zIlrK"
-    crossorigin="anonymous"></script>
-<script src="app.js?v=1.0.119"></script>
+<script src="config.js?v=1.0.125"></script>
+<script src="utils.js?v=1.0.125"></script>
+<script src="supabase-lib.js"></script>
+<script src="supabase.js?v=1.0.125"></script>
+<script src="sync.js?v=1.0.125"></script>
+<script src="ui.js?v=1.0.125"></script>
+<script src="app.js?v=1.0.125"></script>
 
 </body>
 </html>

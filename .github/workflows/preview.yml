@@ -1,0 +1,55 @@
+name: Preview – feature/sync-funktion
+
+# Deployt den Feature-Branch unter:
+# https://algether-spec.github.io/einkaufsliste/preview/feature-sync-funktion/
+#
+# Setup (einmalig in GitHub Repository Settings):
+#   Settings → Pages → Source: "Deploy from a branch" → Branch: gh-pages / root
+#
+# HINWEIS: pages.yml (main) muss ebenfalls auf JamesIves umgestellt werden
+# (siehe pages.yml), damit main das preview/-Verzeichnis nicht überschreibt.
+
+on:
+  push:
+    branches: [feature/sync-funktion]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages-preview-sync-funktion
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deployment-Ordner vorbereiten
+        run: |
+          mkdir _deploy
+          rsync -a \
+            --exclude='.git' \
+            --exclude='_deploy' \
+            --exclude='.github' \
+            --exclude='node_modules' \
+            . _deploy/
+          sed -i "s|supabaseUrl: \"[^\"]*\"|supabaseUrl: \"${{ secrets.SUPABASE_URL }}\"|" _deploy/config.js
+          sed -i "s|supabaseAnonKey: \"[^\"]*\"|supabaseAnonKey: \"${{ secrets.SUPABASE_ANON_KEY }}\"|" _deploy/config.js
+
+      - name: Preview auf gh-pages Branch deployen
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: gh-pages
+          folder: _deploy
+          target-folder: preview/feature-sync-funktion
+          clean: true
+          commit-message: "preview: feature/sync-funktion @ ${{ github.sha }}"
+
+      - name: Preview-URL anzeigen
+        run: |
+          OWNER=$(echo "${{ github.repository }}" | cut -d'/' -f1)
+          REPO=$(echo "${{ github.repository }}"  | cut -d'/' -f2)
+          echo "Preview URL: https://${OWNER}.github.io/${REPO}/preview/feature-sync-funktion/"

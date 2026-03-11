@@ -43,7 +43,10 @@ header {
         radial-gradient(120% 160% at 15% -20%, rgba(255,255,255,0.28), transparent 46%),
         linear-gradient(140deg, #1d4ed8 0%, #2563eb 45%, #0ea5e9 100%);
     padding: 16px 14px;
-    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
     font-size: clamp(26px, 6vw, 32px);
     font-weight: 800;
     letter-spacing: 0.4px;
@@ -54,6 +57,22 @@ header {
     box-shadow:
         inset 0 -1px 0 rgba(255,255,255,0.22),
         0 8px 18px rgba(30, 64, 175, 0.2);
+}
+
+.help-button {
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(255,255,255,0.18);
+    border: 1px solid rgba(255,255,255,0.35);
+    border-radius: 10px;
+    color: white;
+    font-size: 20px;
+    line-height: 1;
+    padding: 4px 8px;
+    cursor: pointer;
+    min-height: 34px;
 }
 
 .auth-bar {
@@ -601,16 +620,27 @@ body.modus-einkaufen #liste li {
     font-size: 20px;
 }
 
-.help-card ol {
+.help-section {
+    margin-top: 12px;
+}
+
+.help-section-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #1e3a5f;
+    margin-bottom: 4px;
+}
+
+.help-list {
     margin: 0;
-    padding-left: 20px;
+    padding-left: 18px;
     display: grid;
-    gap: 8px;
+    gap: 4px;
     color: #334155;
 }
 
-.help-card ol li {
-    list-style: decimal;
+.help-list li {
+    list-style: disc;
     background: transparent;
     border: none;
     box-shadow: none;
@@ -619,8 +649,8 @@ body.modus-einkaufen #liste li {
     border-radius: 0;
     width: auto;
     display: list-item;
-    font-size: 17px;
-    line-height: 1.35;
+    font-size: 15px;
+    line-height: 1.4;
 }
 
 .help-close {

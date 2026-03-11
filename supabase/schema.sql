@@ -549,3 +549,149 @@ grant execute on function public.cleanup_old_data() to authenticated;
 -- select public.cleanup_old_data();
 -- Als Cron-Job (Supabase Dashboard → Database → Scheduled jobs → täglich):
 -- select public.cleanup_old_data();
+
+-- =============================
+-- device_roles: Geräte-Rolle in Supabase persistieren
+-- Überlebt iOS-PWA-Install (localStorage-Isolation zwischen Safari und PWA).
+-- Hauptgerät = hat den Code ursprünglich generiert.
+-- Gast = hat sich über einen Teilen-Link verbunden.
+-- Sicherheitsregel: Rolle kommt ausschliesslich aus Supabase.
+-- Das Gerät darf seinen sync_code aktualisieren, die Rolle bleibt in der App-Logik stabil.
+-- =============================
+
+create table if not exists public.device_roles (
+  device_id text primary key,
+  rolle text not null check (rolle in ('hauptgeraet', 'gast')),
+  sync_code text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.device_roles enable row level security;
+
+grant select, insert, update on public.device_roles to authenticated;
+
+drop policy if exists "device_roles_select" on public.device_roles;
+create policy "device_roles_select"
+on public.device_roles
+for select
+to authenticated
+using (true);
+
+drop policy if exists "device_roles_insert" on public.device_roles;
+create policy "device_roles_insert"
+on public.device_roles
+for insert
+to authenticated
+with check (device_id is not null and length(trim(device_id)) > 0);
+
+drop policy if exists "device_roles_update" on public.device_roles;
+create policy "device_roles_update"
+on public.device_roles
+for update
+to authenticated
+using (true)
+with check (device_id is not null and length(trim(device_id)) > 0);
+
+-- =============================
+-- device_join_tokens: serverseitiger Join-/Install-Kontext
+-- Browser und installierte PWA teilen keinen localStorage auf iOS.
+-- Daher transportiert die start_url nur einen Token; Rolle und sync_code
+-- werden beim Start ausschliesslich aus Supabase geladen.
+-- =============================
+
+create table if not exists public.device_join_tokens (
+  join_token text primary key,
+  rolle text not null check (rolle in ('hauptgeraet', 'gast')),
+  sync_code text not null,
+  created_by_device_id text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  expires_at timestamptz
+);
+
+create index if not exists device_join_tokens_sync_code_idx
+  on public.device_join_tokens (sync_code);
+
+alter table public.device_join_tokens enable row level security;
+
+grant select, insert, update on public.device_join_tokens to authenticated;
+
+drop policy if exists "device_join_tokens_select" on public.device_join_tokens;
+create policy "device_join_tokens_select"
+on public.device_join_tokens
+for select
+to authenticated
+using (
+  join_token is not null
+  and length(trim(join_token)) > 0
+  and (expires_at is null or expires_at > now())
+);
+
+drop policy if exists "device_join_tokens_insert" on public.device_join_tokens;
+create policy "device_join_tokens_insert"
+on public.device_join_tokens
+for insert
+to authenticated
+with check (
+  join_token is not null
+  and length(trim(join_token)) > 0
+  and rolle in ('hauptgeraet', 'gast')
+  and sync_code is not null
+  and length(trim(sync_code)) > 0
+);
+
+drop policy if exists "device_join_tokens_update" on public.device_join_tokens;
+create policy "device_join_tokens_update"
+on public.device_join_tokens
+for update
+to authenticated
+using (
+  join_token is not null
+  and length(trim(join_token)) > 0
+)
+with check (
+  join_token is not null
+  and length(trim(join_token)) > 0
+  and rolle in ('hauptgeraet', 'gast')
+  and sync_code is not null
+  and length(trim(sync_code)) > 0
+);
+
+-- =============================
+-- sync_invites: Legacy-Geräte-ID → Sync-Code Mapping für ältere Einladungs-Links
+-- Bleibt für Rückwärtskompatibilität erhalten.
+-- =============================
+
+create table if not exists public.sync_invites (
+  device_id text primary key,
+  sync_code text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.sync_invites enable row level security;
+
+grant select, insert, update on public.sync_invites to authenticated;
+
+drop policy if exists "sync_invites_select" on public.sync_invites;
+create policy "sync_invites_select"
+on public.sync_invites
+for select
+to authenticated
+using (true);
+
+drop policy if exists "sync_invites_insert" on public.sync_invites;
+create policy "sync_invites_insert"
+on public.sync_invites
+for insert
+to authenticated
+with check (device_id is not null and length(trim(device_id)) > 0);
+
+drop policy if exists "sync_invites_update" on public.sync_invites;
+create policy "sync_invites_update"
+on public.sync_invites
+for update
+to authenticated
+using (true)
+with check (device_id is not null and length(trim(device_id)) > 0);
