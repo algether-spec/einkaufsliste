@@ -13,7 +13,6 @@ let syncEditMode = false;
 let lastSyncAt = "";
 let hintergrundTimer = null;
 let updatePruefTimer = null;
-let updateLaeuft = false;
 let snapshotWirdAngewendet = false;
 let _aenderungenNachSnapshotAusstehend = false;
 let _speichernSyncTimer = null;
@@ -775,129 +774,60 @@ function hatAktiveBearbeitung() {
     );
 }
 
-function aufSwWarten(worker, timeoutMs = 10000) {
-    if (!worker || worker.state === "installed" || worker.state === "redundant") {
-        return Promise.resolve();
-    }
-    return new Promise(resolve => {
-        const handler = () => {
-            if (worker.state === "installed" || worker.state === "redundant") {
-                worker.removeEventListener("statechange", handler);
-                resolve();
-            }
-        };
-        worker.addEventListener("statechange", handler);
-        setTimeout(() => { worker.removeEventListener("statechange", handler); resolve(); }, timeoutMs);
-    });
-}
-
-function aufControllerWarten(timeoutMs = 4500) {
-    return new Promise(resolve => {
-        let finished = false;
-        const done = value => {
-            if (finished) return;
-            finished = true;
-            navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
-            clearTimeout(timer);
-            resolve(value);
-        };
-        const onControllerChange = () => done(true);
-        const timer = setTimeout(() => done(false), timeoutMs);
-        navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
-    });
-}
-
-async function wartendenSwAktivieren(registration) {
-    if (!registration?.waiting) return false;
-    const changedPromise = aufControllerWarten();
-    registration.waiting.postMessage({ type: "SKIP_WAITING" });
-    return changedPromise;
-}
 
 async function updateErzwingen() {
-    const activeInput = isListening || (multiInput && multiInput.value.trim().length > 0);
-    if (activeInput) {
-        syncStatusSetzen("Update blockiert: Eingabe beenden", "warn");
-        authStatusSetzen("Bitte Mikrofon stoppen und Eingabe mit 'Übernehmen' speichern.");
-        return;
-    }
-
     if (btnForceUpdate) btnForceUpdate.disabled = true;
+    updateButtonVerfuegbarSetzen(false);
     syncStatusSetzen("Update: wird angewendet...", "warn");
 
     try {
+        // 1. Alle Caches löschen
         if ("caches" in window) {
             const keys = await caches.keys();
-            await Promise.all(
-                keys
-                    .filter(key => key.startsWith("einkaufsliste-"))
-                    .map(key => caches.delete(key))
-            );
+            await Promise.all(keys.map(key => caches.delete(key)));
         }
 
+        // 2. Service Worker deregistrieren
         if ("serviceWorker" in navigator) {
             const registrations = await navigator.serviceWorker.getRegistrations();
-
-            for (const registration of registrations) {
-                await registration.update();
-                if (!registration.waiting && registration.installing) {
-                    await aufSwWarten(registration.installing);
-                }
-                if (await wartendenSwAktivieren(registration)) {
-                    syncStatusSetzen("Update: aktiv", "ok");
-                    seitenNeuladen();
-                    return;
-                }
-            }
-
             await Promise.all(registrations.map(r => r.unregister()));
         }
 
-        await new Promise(resolve => setTimeout(resolve, 180));
-        seitenNeuladen();
+        // 3. Seite neu laden – holt alle Dateien frisch vom Server
+        window.location.reload(true);
     } catch (err) {
         console.warn("Update fehlgeschlagen:", err);
         syncStatusSetzen("Update fehlgeschlagen", "offline");
-        authStatusSetzen("Update fehlgeschlagen. Bitte Seite neu laden.");
         if (btnForceUpdate) btnForceUpdate.disabled = false;
     }
 }
 
-async function hatWartendesUpdate() {
-    if (!("serviceWorker" in navigator)) return false;
-    const registrations = await navigator.serviceWorker.getRegistrations();
-    for (const registration of registrations) {
-        if (registration.waiting) return true;
-        await registration.update();
-        if (registration.waiting) return true;
-        if (registration.installing) {
-            await aufSwWarten(registration.installing);
-        }
-        if (registration.waiting) return true;
-    }
-    return false;
+
+function updateButtonVerfuegbarSetzen(verfuegbar) {
+    if (!btnForceUpdate) return;
+    btnForceUpdate.classList.toggle("update-available", verfuegbar);
 }
 
-async function autoUpdatePruefen(trigger = "auto") {
-    if (updateLaeuft) return;
-
+async function serverVersionLaden() {
     try {
-        const hasUpdate = await hatWartendesUpdate();
-        if (!hasUpdate) return;
+        const res = await fetch(`./version.json?t=${Date.now()}`, { cache: "no-store" });
+        if (!res.ok) return null;
+        const data = await res.json();
+        return String(data.version || "").trim();
+    } catch {
+        return null;
+    }
+}
 
-        if (hatAktiveBearbeitung()) {
-            syncStatusSetzen("Update verfuegbar", "warn");
-            authStatusSetzen("Neue Version erkannt. Bei Leerlauf wird automatisch aktualisiert.");
-            return;
-        }
-
-        updateLaeuft = true;
-        authStatusSetzen(`Neue Version erkannt (${trigger}). Update startet...`);
-        await updateErzwingen();
+async function autoUpdatePruefen() {
+    try {
+        const serverVersion = await serverVersionLaden();
+        if (!serverVersion) return;
+        const hasUpdate = serverVersion !== APP_VERSION;
+        updateButtonVerfuegbarSetzen(hasUpdate);
+        if (hasUpdate) syncStatusSetzen("Update verfuegbar", "warn");
     } catch (err) {
         console.warn("Auto-Update-Pruefung fehlgeschlagen:", err);
-    } finally {
-        updateLaeuft = false;
     }
 }
 

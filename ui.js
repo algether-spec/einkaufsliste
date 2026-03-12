@@ -70,6 +70,8 @@ function eingabeFehlerSetzen(text) {
 
 /* --- Listen-Rendering ------------------------------------------- */
 
+const longPressTimers = new WeakMap(); // { start: timerId, activate: timerId }
+
 function datenAusListeLesen() {
     const daten = [];
     liste.querySelectorAll("li").forEach((li, index) => {
@@ -190,12 +192,44 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId(), _batc
 
     if (erledigt) li.classList.add("erledigt");
 
-    li.onclick = () => {
-        if (modus !== MODUS_EINKAUFEN) return;
-        li.classList.toggle("erledigt");
-        listeNachGruppenSortieren();
-        speichern();
+    const cancelLongPress = () => {
+        const timers = longPressTimers.get(li);
+        if (!timers) return;
+        clearTimeout(timers.activate);
+        longPressTimers.delete(li);
+        li.classList.remove("pending");
     };
+
+    li.addEventListener("pointerdown", e => {
+        if (modus !== MODUS_EINKAUFEN) return;
+        e.preventDefault();
+        li.setPointerCapture(e.pointerId); // Finger-Bewegung außerhalb verhindert kein Cancel
+        cancelLongPress();
+
+        const timers = { activate: null };
+        longPressTimers.set(li, timers);
+
+        // Sofort pending zeigen, nach 500ms auslösen
+        li.classList.add("pending");
+
+        timers.activate = setTimeout(() => {
+            if (!longPressTimers.has(li)) return;
+            longPressTimers.delete(li);
+            li.classList.remove("pending");
+            if (li.classList.contains("erledigt")) {
+                li.classList.remove("erledigt");
+            } else {
+                li.classList.add("erledigt");
+            }
+            listeNachGruppenSortieren();
+            speichern();
+        }, 500);
+    });
+
+    // pointerleave entfernt – setPointerCapture verhindert Fehlauslösungen
+    li.addEventListener("pointerup",     cancelLongPress);
+    li.addEventListener("pointercancel", cancelLongPress);
+    li.addEventListener("contextmenu",   e => e.preventDefault());
 
     if (_batchTarget) {
         _batchTarget.appendChild(li);
