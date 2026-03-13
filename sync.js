@@ -793,8 +793,9 @@ async function updateErzwingen() {
             await Promise.all(registrations.map(r => r.unregister()));
         }
 
-        // 3. Seite neu laden – holt alle Dateien frisch vom Server
-        window.location.reload(true);
+        // 3. Seite neu laden mit Cache-Busting – holt alle Dateien frisch vom Server
+        const base = location.origin + location.pathname;
+        location.replace(base + "?t=" + Date.now());
     } catch (err) {
         console.warn("Update fehlgeschlagen:", err);
         syncStatusSetzen("Update fehlgeschlagen", "offline");
