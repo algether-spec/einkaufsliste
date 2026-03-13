@@ -209,7 +209,7 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId(), _batc
         const timers = { activate: null };
         longPressTimers.set(li, timers);
 
-        // Sofort pending zeigen, nach 500ms auslösen
+        // Sofort pending zeigen, nach 250ms auslösen
         li.classList.add("pending");
 
         timers.activate = setTimeout(() => {
@@ -223,7 +223,7 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId(), _batc
             }
             listeNachGruppenSortieren();
             speichern();
-        }, 500);
+        }, 250);
     });
 
     // pointerleave entfernt – setPointerCapture verhindert Fehlauslösungen
@@ -334,6 +334,9 @@ function fokusInputAmEnde() {
 function mehrzeilenSpeichern() {
     const text = multiInput.value.trim();
     if (!text) return;
+
+    // Erledigte Einträge vor dem Hinzufügen neuer Artikel löschen
+    liste.querySelectorAll("li.erledigt").forEach(li => li.remove());
 
     text.split("\n")
         .map(l => l.trim())
