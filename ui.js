@@ -335,6 +335,9 @@ function mehrzeilenSpeichern() {
     const text = multiInput.value.trim();
     if (!text) return;
 
+    // Erledigte Einträge vor dem Hinzufügen neuer Artikel löschen
+    liste.querySelectorAll("li.erledigt").forEach(li => li.remove());
+
     text.split("\n")
         .map(l => l.trim())
         .filter(Boolean)
