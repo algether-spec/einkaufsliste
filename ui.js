@@ -209,7 +209,7 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId(), _batc
         const timers = { activate: null };
         longPressTimers.set(li, timers);
 
-        // Sofort pending zeigen, nach 500ms auslösen
+        // Sofort pending zeigen, nach 250ms auslösen
         li.classList.add("pending");
 
         timers.activate = setTimeout(() => {
@@ -223,7 +223,7 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId(), _batc
             }
             listeNachGruppenSortieren();
             speichern();
-        }, 500);
+        }, 250);
     });
 
     // pointerleave entfernt – setPointerCapture verhindert Fehlauslösungen
