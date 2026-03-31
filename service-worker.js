@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v1.0.161";
+const CACHE_VERSION = "v1.0.162";
 const CACHE_NAME = "einkaufsliste-" + CACHE_VERSION;
 
 // Separater Cache ohne Versionsnummer – überlebt SW-Updates.
@@ -53,9 +53,6 @@ self.addEventListener("activate", event => {
 });
 
 self.addEventListener("message", event => {
-  if (event.data?.type === "SKIP_WAITING") {
-    self.skipWaiting();
-  }
   if (event.data?.type === "SET_INSTALL_CONTEXT") {
     _manifestInstallContext = {
       joinToken: String(event.data.joinToken || ""),
