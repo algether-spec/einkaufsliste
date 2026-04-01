@@ -826,12 +826,17 @@ async function autoUpdatePruefen() {
         if (!serverVersion) return;
         const hasUpdate = serverVersion !== APP_VERSION;
         updateButtonVerfuegbarSetzen(hasUpdate);
-        if (hasUpdate) {
-            syncStatusSetzen("Update verfuegbar", "warn");
-            // SW-Update anstoßen → skipWaiting → controllerchange → Reload
-            const reg = await navigator.serviceWorker.getRegistration();
-            if (reg) reg.update().catch(() => {});
-        }
+        if (!hasUpdate) return;
+
+        syncStatusSetzen("Update verfuegbar", "warn");
+        if (!("serviceWorker" in navigator)) return;
+
+        // SW-Update anstoßen (lädt neuen SW wenn verfügbar).
+        // Danach direkt neu laden – deckt den Fall ab, dass controllerchange
+        // bereits vor dem aktuellen Seitenaufruf gefeuert hat (z. B. nach iOS-Hintergrund).
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (reg) await reg.update().catch(() => {});
+        window.location.reload();
     } catch (err) {
         console.warn("Auto-Update-Pruefung fehlgeschlagen:", err);
     }
