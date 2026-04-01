@@ -91,6 +91,10 @@ if (supabaseClient) {
 // SW-Registrierung + aktuellen Code an den SW übermitteln damit das Manifest
 // dynamisch mit start_url ausgeliefert werden kann (für PWA-Install).
 if ("serviceWorker" in navigator) {
+    // Nach SW-Update Seite neu laden, damit neue JS/CSS aktiv werden.
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+        window.location.reload();
+    });
     navigator.serviceWorker.register("service-worker.js?v=" + APP_VERSION, { updateViaCache: "none" });
     navigator.serviceWorker.ready.then(reg => {
         const _swCode = localStorage.getItem(SYNC_CODE_PERMANENT_KEY) || localStorage.getItem(SYNC_CODE_KEY);

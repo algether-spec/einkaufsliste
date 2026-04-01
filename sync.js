@@ -826,7 +826,12 @@ async function autoUpdatePruefen() {
         if (!serverVersion) return;
         const hasUpdate = serverVersion !== APP_VERSION;
         updateButtonVerfuegbarSetzen(hasUpdate);
-        if (hasUpdate) syncStatusSetzen("Update verfuegbar", "warn");
+        if (hasUpdate) {
+            syncStatusSetzen("Update verfuegbar", "warn");
+            // SW-Update anstoßen → skipWaiting → controllerchange → Reload
+            const reg = await navigator.serviceWorker.getRegistration();
+            if (reg) reg.update().catch(() => {});
+        }
     } catch (err) {
         console.warn("Auto-Update-Pruefung fehlgeschlagen:", err);
     }
