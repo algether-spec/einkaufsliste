@@ -6,9 +6,11 @@ Diese Regeln gelten verbindlich für **Einkaufsliste** und **Erinnerungen**.
 
 ## Branch-Strategie
 
-- Immer auf einem Feature-Branch entwickeln, **nie direkt auf main**
-- Branch-Name: `feature/<beschreibung>`
-- Vor dem Merge immer die Preview-URL auf dem Handy testen
+- Alle Änderungen werden auf **dev** gepusht — NIEMALS auf **main**
+- Push auf **main** NUR wenn der Prompt explizit **"merge to main"** oder **"push to main"** enthält
+- Patch-Version bei dev-Commits mit `-dev` Suffix — Beispiel: `v1.0.164-dev`
+- Vor jedem Push prüfen: `git branch` — sicherstellen dass **dev** aktiv ist
+- Merge zu main: Version ohne `-dev` Suffix, dann `git checkout main && git merge dev && git push && git checkout dev`
 
 ## Push-Regeln
 
