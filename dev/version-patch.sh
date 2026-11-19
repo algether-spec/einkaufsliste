@@ -1,21 +1,31 @@
 #!/bin/bash
+# Versionsnummer an allen Stellen setzen.
+#
+#   ./version-patch.sh            → Patch +1 mit -dev Suffix (z. B. 1.0.164-dev → 1.0.165-dev)
+#   ./version-patch.sh --release  → -dev Suffix entfernen   (z. B. 1.0.165-dev → 1.0.165)
+#
+# Quelle der Wahrheit: APP_VERSION in config.js
 set -euo pipefail
+cd "$(dirname "$0")"
 
-VERSION=$(node -p "require('./package.json').version")
-IFS='.' read -r major minor patch <<< "$VERSION"
-patch=$((patch + 1))
-NEW_VERSION="$major.$minor.$patch"
+CURRENT=$(sed -nE 's/^const APP_VERSION = "([^"]+)";.*/\1/p' config.js)
+if [[ ! "$CURRENT" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)(-dev)?$ ]]; then
+  echo "Ungültige APP_VERSION in config.js: '$CURRENT'" >&2
+  exit 1
+fi
+major=${BASH_REMATCH[1]}; minor=${BASH_REMATCH[2]}; patch=${BASH_REMATCH[3]}
 
-echo "$NEW_VERSION" > .gitversion
+if [[ "${1:-}" == "--release" ]]; then
+  NEW="$major.$minor.$patch"
+else
+  NEW="$major.$minor.$((patch + 1))-dev"
+fi
 
-perl -0pi -e "s/\"version\":\\s*\"[0-9]+\\.[0-9]+\\.[0-9]+\"/\"version\": \"$NEW_VERSION\"/" package.json
-perl -0pi -e "s/const APP_VERSION = \"[0-9]+\\.[0-9]+\\.[0-9]+\";/const APP_VERSION = \"$NEW_VERSION\";/" app.js
-perl -0pi -e "s/id=\"version-badge\">v[0-9]+\\.[0-9]+\\.[0-9]+</id=\"version-badge\">v$NEW_VERSION</" index.html
-perl -0pi -e "s/href=\"style\\.css(?:\\?v=[0-9]+\\.[0-9]+\\.[0-9]+)?\"/href=\"style.css?v=$NEW_VERSION\"/" index.html
-perl -0pi -e "s/href=\"manifest\\.json(?:\\?v=[0-9]+\\.[0-9]+\\.[0-9]+)?\"/href=\"manifest.json?v=$NEW_VERSION\"/" index.html
-perl -0pi -e "s/src=\"config\\.js(?:\\?v=[0-9]+\\.[0-9]+\\.[0-9]+)?\"/src=\"config.js?v=$NEW_VERSION\"/" index.html
-perl -0pi -e "s/src=\"app\\.js(?:\\?v=[0-9]+\\.[0-9]+\\.[0-9]+)?\"/src=\"app.js?v=$NEW_VERSION\"/" index.html
-perl -0pi -e "s/register\\(\"service-worker\\.js(?:\\?v=[0-9]+\\.[0-9]+\\.[0-9]+)?\"/register(\"service-worker.js?v=$NEW_VERSION\"/" index.html
-perl -0pi -e "s/const CACHE_VERSION = \"v[0-9]+\\.[0-9]+\\.[0-9]+\";/const CACHE_VERSION = \"v$NEW_VERSION\";/" service-worker.js
+V='[0-9]+\.[0-9]+\.[0-9]+(-dev)?'
+perl -pi -e "s/const APP_VERSION = \"$V\";/const APP_VERSION = \"$NEW\";/" config.js
+perl -pi -e "s/const CACHE_VERSION = \"v$V\";/const CACHE_VERSION = \"v$NEW\";/" service-worker.js
+perl -pi -e "s/\"version\":\\s*\"$V\"/\"version\": \"$NEW\"/" package.json
+perl -pi -e "s/\\?v=$V\"/?v=$NEW\"/g; s/id=\"version-badge\">v$V</id=\"version-badge\">v$NEW</" index.html
+printf '{"version":"%s"}\n' "$NEW" > version.json
 
-echo "$NEW_VERSION"
+echo "$CURRENT → $NEW"
