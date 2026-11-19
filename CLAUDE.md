@@ -10,7 +10,9 @@ Diese Regeln gelten verbindlich für **Einkaufsliste** und **Erinnerungen**.
 - Push auf **main** NUR wenn der Prompt explizit **"merge to main"** oder **"push to main"** enthält
 - Patch-Version bei dev-Commits mit `-dev` Suffix — Beispiel: `v1.0.164-dev`
 - Vor jedem Push prüfen: `git branch` — sicherstellen dass **dev** aktiv ist
-- Merge zu main: Version ohne `-dev` Suffix, dann `git checkout main && git merge dev && git push && git checkout dev`
+- Versionsnummer setzen mit `./version-patch.sh` (dev) bzw. `./version-patch.sh --release` (vor Merge)
+- Merge zu main: Version ohne `-dev` Suffix, dann `git checkout main && git pull && git merge dev && git push && git checkout dev`
+  (`git pull` ist nötig, weil die GitHub Action den Ordner `dev/` auf main aktualisiert)
 
 ## Push-Regeln
 
@@ -21,7 +23,7 @@ Diese Regeln gelten verbindlich für **Einkaufsliste** und **Erinnerungen**.
 ## Versionsnummer
 
 - Bei jedem Commit den **Patch automatisch erhöhen** (z. B. v1.0.143 → v1.0.144)
-- Versionsnummer aktualisieren in: `config.js` und `service-worker.js`
+- Versionsnummer aktualisieren in: `config.js`, `service-worker.js`, `version.json`, `package.json`, `index.html` (`?v=`) – erledigt `./version-patch.sh`
 
 ## Commit-Nachrichten
 
