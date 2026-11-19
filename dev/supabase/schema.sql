@@ -1,3 +1,7 @@
+-- WICHTIG: Nach dem Ausführen dieser Datei IMMER danach
+--   supabase/security_1.sql und supabase/security_2.sql ausführen.
+-- Diese Datei allein setzt die alten, offenen Zugriffsregeln (Sicherheitslücke)!
+
 create table if not exists public.shopping_items (
   id bigint generated always as identity primary key,
   sync_code text not null,
@@ -695,3 +699,8 @@ for update
 to authenticated
 using (true)
 with check (device_id is not null and length(trim(device_id)) > 0);
+
+
+-- =============================
+-- WEITER MIT: supabase/security_1.sql, danach supabase/security_2.sql
+-- =============================

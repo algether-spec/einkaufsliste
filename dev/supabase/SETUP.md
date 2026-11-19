@@ -4,6 +4,12 @@
 1. Supabase Projekt oeffnen.
 2. SQL Editor oeffnen.
 3. Inhalt aus `supabase/schema.sql` ausfuehren.
+4. Danach `supabase/security_1.sql` ausfuehren.
+5. Danach `supabase/security_2.sql` ausfuehren (erst, wenn der Client ab v1.0.167 auf main ist).
+
+> **Achtung:** `schema.sql` allein setzt alte, offene Zugriffsregeln.
+> Wann immer `schema.sql` (erneut) ausgefuehrt wird – auch bei den Fehlerbildern unten –
+> danach **immer** `security_1.sql` und `security_2.sql` ausfuehren.
 
 ## 2) Auth aktivieren
 1. In Supabase: `Authentication -> Providers -> Anonymous`.
@@ -22,7 +28,12 @@
 
 ## 5) Hinweis
 - Die Tabelle ist mit Row Level Security (RLS) geschuetzt.
-- Zugriff wird fuer diese Version ueber den Sync-Code gesteuert.
+- Zugriff nur fuer Mitglieder eines Sync-Codes (`device_sync_memberships`).
+  Mitglied wird man ueber `use_sync_code` (Code kennen), `redeem_join_token` (Teilen-Link)
+  oder `redeem_legacy_invite` (alter Einladungs-Link).
+- Code-Durchprobieren ist begrenzt: max. 20 fremde Codes pro Nutzer und Stunde.
+- Eintraege werden nur ueber `apply_shopping_ops` geschrieben (max. 500 Ops pro Aufruf, Text max. 6 MB).
+- `cleanup_old_data()` nur per Supabase Cron oder SQL-Editor ausfuehren (fuer Clients gesperrt).
 - Zusaetzlich speichert `sync_codes` dauerhaft, welche Codes schon genutzt wurden (`created_at`, `last_used_at`).
 - Dadurch kann `Neu` belegte Codes zuverlaessiger erkennen, auch wenn eine Liste gerade leer ist.
 
