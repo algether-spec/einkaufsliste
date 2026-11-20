@@ -240,6 +240,12 @@ function syncFehlerHinweis(err) {
     if (message.includes("sync_code_reserved")) {
         return "Code HELP0000 ist reserviert.";
     }
+    if (message.includes("sync_code_rate_limited")) {
+        return "Zu viele Code-Versuche. Bitte in einer Stunde erneut probieren.";
+    }
+    if (message.includes("sync_code_not_found")) {
+        return "Code nicht gefunden.";
+    }
     if (message.includes("failed to fetch") || message.includes("network")) {
         return "Netzwerkfehler. Internetverbindung pruefen.";
     }

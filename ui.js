@@ -349,15 +349,12 @@ function mehrzeilenSpeichern() {
     speichern();
     multiInput.blur();
 
+    // Mikro läuft weiter – nur das bisher Gesagte gilt als übernommen.
+    // (Ein Neustart wäre auf iOS ohne erneuten Tap nicht erlaubt.)
     if (isListening) {
-        finalTranscript = "";
-        latestTranscript = "";
-        skipAutoSaveForCurrentBuffer = true;
-        ignoreResultsUntil = Date.now() + 500;
-        restartMicAfterManualCommit = true;
-        clearTimeout(micSessionTimer);
-        recognition.stop();
-        mikStatusSetzen("Eintrag gespeichert, Mikro wird neu gestartet...");
+        diktatPufferAbschliessen();
+        mikSitzungsTimerStarten();
+        mikStatusSetzen("Gespeichert – bitte weiter sprechen...");
     }
 }
 
@@ -365,15 +362,10 @@ function eingabeLeeren(stopDictation = false) {
     multiInput.value = "";
     eingabeGroessenpassen();
 
-    finalTranscript = "";
-    latestTranscript = "";
-    skipAutoSaveForCurrentBuffer = true;
-    ignoreResultsUntil = Date.now() + 700;
+    diktatPufferAbschliessen();
 
-    if (stopDictation && isListening && recognition) {
-        restartMicAfterManualCommit = false;
-        clearTimeout(micSessionTimer);
-        recognition.stop();
+    if (stopDictation && (isListening || micStarting)) {
+        spracherkennungVerwerfen();
         mikStatusSetzen("Eingabe geloescht.");
         return;
     }
@@ -534,8 +526,13 @@ let finalTranscript = "";
 let latestTranscript = "";
 let micSessionTimer;
 let skipAutoSaveForCurrentBuffer = false;
-let ignoreResultsUntil = 0;
-let restartMicAfterManualCommit = false;
+// Index in event.results: alles davor wurde bereits übernommen/verworfen
+let committedResultCount = 0;
+let lastResultCount = 0;
+let micStarting = false;
+let micStartRequestedAt = 0;
+
+const MIC_START_TIMEOUT_MS = 3000;
 
 function mikStatusSetzen(message = "") {
     if (!micStatus) return;
@@ -567,48 +564,43 @@ function spracherkennungInit() {
     r.maxAlternatives = 1;
 
     r.onstart = () => {
+        micStarting = false;
         isListening = true;
         finalTranscript = "";
         latestTranscript = "";
         skipAutoSaveForCurrentBuffer = false;
-        if (Date.now() >= ignoreResultsUntil) ignoreResultsUntil = 0;
-        restartMicAfterManualCommit = false;
+        committedResultCount = 0;
+        lastResultCount = 0;
         mikButtonSetzen(true);
         mikStatusSetzen("Spracheingabe aktiv (max. 30s)...");
-        clearTimeout(micSessionTimer);
-        micSessionTimer = setTimeout(() => {
-            if (!isListening) return;
-            mikStatusSetzen("Zeitlimit erreicht.");
-            r.stop();
-        }, MIC_SESSION_MS);
+        mikSitzungsTimerStarten();
     };
 
+    // Text bei jedem Ergebnis neu aufbauen – nur aus dem Teil nach dem
+    // letzten "Übernehmen". Robust auch wenn Safari alte Ergebnisse erneut schickt.
     r.onresult = event => {
         if (!isListening) return;
-        if (Date.now() < ignoreResultsUntil) return;
+        lastResultCount = event.results.length;
+        if (committedResultCount > lastResultCount) committedResultCount = 0;
 
-        let interimTranscript = "";
-
-        for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        const finals = [];
+        const interims = [];
+        for (let i = committedResultCount; i < event.results.length; i += 1) {
             const part = event.results[i][0]?.transcript?.trim() || "";
             if (!part) continue;
-            if (event.results[i].isFinal) finalTranscript += (finalTranscript ? " " : "") + part;
-            else interimTranscript += (interimTranscript ? " " : "") + part;
+            (event.results[i].isFinal ? finals : interims).push(part);
         }
 
-        const combined = [finalTranscript, interimTranscript].filter(Boolean).join(" ").trim();
+        finalTranscript = finals.join(" ");
+        const combined = [...finals, ...interims].join(" ").trim();
         latestTranscript = combined;
         if (combined) skipAutoSaveForCurrentBuffer = false;
         eingabeMitDiktat(combined);
     };
 
     r.onerror = event => {
-        clearTimeout(micSessionTimer);
-        // Zustand zurücksetzen – sonst glaubt die App das Mikro läuft noch
-        isListening = false;
-        mikButtonSetzen(false);
-        // Recognition-Objekt verwerfen: bei Folge-Tap wird ein frisches erstellt
-        recognition = null;
+        // Objekt sauber beenden: bei Folge-Tap wird ein frisches erstellt
+        spracherkennungVerwerfen();
         const errorText = {
             "not-allowed": "Mikrofon nicht erlaubt – bitte in Einstellungen erlauben.",
             "service-not-allowed": "Spracherkennung blockiert – bitte in Einstellungen erlauben.",
@@ -621,13 +613,9 @@ function spracherkennungInit() {
 
     r.onend = () => {
         clearTimeout(micSessionTimer);
+        micStarting = false;
         isListening = false;
         mikButtonSetzen(false);
-        if (restartMicAfterManualCommit) {
-            restartMicAfterManualCommit = false;
-            spracherkennungStarten();
-            return;
-        }
 
         if (skipAutoSaveForCurrentBuffer) {
             skipAutoSaveForCurrentBuffer = false;
@@ -655,20 +643,57 @@ function spracherkennungInit() {
     return r;
 }
 
+// Bisher Gesagtes als erledigt markieren (übernommen oder gelöscht)
+function diktatPufferAbschliessen() {
+    committedResultCount = lastResultCount;
+    finalTranscript = "";
+    latestTranscript = "";
+    skipAutoSaveForCurrentBuffer = true;
+}
+
+// 30s-Limit (neu) starten – nach jedem "Übernehmen" beginnt es von vorn
+function mikSitzungsTimerStarten() {
+    clearTimeout(micSessionTimer);
+    micSessionTimer = setTimeout(() => {
+        if (!isListening || !recognition) return;
+        mikStatusSetzen("Zeitlimit erreicht.");
+        recognition.stop();
+    }, MIC_SESSION_MS);
+}
+
+// Beendet das aktuelle Recognition-Objekt endgültig, damit keine
+// verwaiste Instanz das Mikrofon blockiert oder Events nachliefert.
+function spracherkennungVerwerfen() {
+    clearTimeout(micSessionTimer);
+    const old = recognition;
+    recognition = null;
+    micStarting = false;
+    isListening = false;
+    mikButtonSetzen(false);
+    if (!old) return;
+    old.onstart = old.onresult = old.onerror = old.onend = null;
+    try { old.abort(); } catch (_) { /* bereits beendet */ }
+}
+
 function spracherkennungStarten() {
+    spracherkennungVerwerfen();
+    recognition = spracherkennungInit();
     if (!recognition) return;
+    micStarting = true;
+    micStartRequestedAt = Date.now();
     mikStatusSetzen("Mikrofon wird gestartet...");
 
     try {
         recognition.start();
     } catch (error) {
         console.warn("Speech start error:", error);
-        // Objekt könnte in kaputtem Zustand sein – verwerfen damit nächster Tap funktioniert
-        isListening = false;
-        mikButtonSetzen(false);
-        recognition = null;
+        spracherkennungVerwerfen();
         mikStatusSetzen("Mikrofon nicht bereit. Bitte erneut tippen.");
     }
+}
+
+function istMikStartHaengend() {
+    return micStarting && Date.now() - micStartRequestedAt > MIC_START_TIMEOUT_MS;
 }
 
 function diktatUmschalten() {
@@ -682,18 +707,11 @@ function diktatUmschalten() {
         return;
     }
 
-    // Inkonsistenter Zustand (recognition null aber isListening true) → zurücksetzen
-    if (!recognition && isListening) {
-        isListening = false;
-        mikButtonSetzen(false);
-    }
+    // Start läuft noch → Doppel-Tap ignorieren (außer der Start hängt)
+    if (micStarting && !istMikStartHaengend()) return;
 
-    if (!recognition) recognition = spracherkennungInit();
-    if (!recognition) return;
-
-    if (isListening) {
+    if (isListening && recognition) {
         clearTimeout(micSessionTimer);
-        restartMicAfterManualCommit = false;
         recognition.stop();
         return;
     }
