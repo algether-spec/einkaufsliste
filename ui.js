@@ -349,10 +349,12 @@ function mehrzeilenSpeichern() {
     speichern();
     multiInput.blur();
 
-    // Kein Auto-Neustart: iOS erlaubt start() nur direkt nach einem Tap
-    if (isListening || micStarting) {
-        spracherkennungVerwerfen();
-        mikStatusSetzen("Gespeichert – 🎤 tippen für nächsten Eintrag.");
+    // Mikro läuft weiter – nur das bisher Gesagte gilt als übernommen.
+    // (Ein Neustart wäre auf iOS ohne erneuten Tap nicht erlaubt.)
+    if (isListening) {
+        diktatPufferAbschliessen();
+        mikSitzungsTimerStarten();
+        mikStatusSetzen("Gespeichert – bitte weiter sprechen...");
     }
 }
 
@@ -360,10 +362,7 @@ function eingabeLeeren(stopDictation = false) {
     multiInput.value = "";
     eingabeGroessenpassen();
 
-    finalTranscript = "";
-    latestTranscript = "";
-    skipAutoSaveForCurrentBuffer = true;
-    ignoreResultsUntil = Date.now() + 700;
+    diktatPufferAbschliessen();
 
     if (stopDictation && (isListening || micStarting)) {
         spracherkennungVerwerfen();
@@ -527,7 +526,9 @@ let finalTranscript = "";
 let latestTranscript = "";
 let micSessionTimer;
 let skipAutoSaveForCurrentBuffer = false;
-let ignoreResultsUntil = 0;
+// Index in event.results: alles davor wurde bereits übernommen/verworfen
+let committedResultCount = 0;
+let lastResultCount = 0;
 let micStarting = false;
 let micStartRequestedAt = 0;
 
@@ -568,31 +569,30 @@ function spracherkennungInit() {
         finalTranscript = "";
         latestTranscript = "";
         skipAutoSaveForCurrentBuffer = false;
-        if (Date.now() >= ignoreResultsUntil) ignoreResultsUntil = 0;
+        committedResultCount = 0;
+        lastResultCount = 0;
         mikButtonSetzen(true);
         mikStatusSetzen("Spracheingabe aktiv (max. 30s)...");
-        clearTimeout(micSessionTimer);
-        micSessionTimer = setTimeout(() => {
-            if (!isListening) return;
-            mikStatusSetzen("Zeitlimit erreicht.");
-            r.stop();
-        }, MIC_SESSION_MS);
+        mikSitzungsTimerStarten();
     };
 
+    // Text bei jedem Ergebnis neu aufbauen – nur aus dem Teil nach dem
+    // letzten "Übernehmen". Robust auch wenn Safari alte Ergebnisse erneut schickt.
     r.onresult = event => {
         if (!isListening) return;
-        if (Date.now() < ignoreResultsUntil) return;
+        lastResultCount = event.results.length;
+        if (committedResultCount > lastResultCount) committedResultCount = 0;
 
-        let interimTranscript = "";
-
-        for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        const finals = [];
+        const interims = [];
+        for (let i = committedResultCount; i < event.results.length; i += 1) {
             const part = event.results[i][0]?.transcript?.trim() || "";
             if (!part) continue;
-            if (event.results[i].isFinal) finalTranscript += (finalTranscript ? " " : "") + part;
-            else interimTranscript += (interimTranscript ? " " : "") + part;
+            (event.results[i].isFinal ? finals : interims).push(part);
         }
 
-        const combined = [finalTranscript, interimTranscript].filter(Boolean).join(" ").trim();
+        finalTranscript = finals.join(" ");
+        const combined = [...finals, ...interims].join(" ").trim();
         latestTranscript = combined;
         if (combined) skipAutoSaveForCurrentBuffer = false;
         eingabeMitDiktat(combined);
@@ -641,6 +641,24 @@ function spracherkennungInit() {
     };
 
     return r;
+}
+
+// Bisher Gesagtes als erledigt markieren (übernommen oder gelöscht)
+function diktatPufferAbschliessen() {
+    committedResultCount = lastResultCount;
+    finalTranscript = "";
+    latestTranscript = "";
+    skipAutoSaveForCurrentBuffer = true;
+}
+
+// 30s-Limit (neu) starten – nach jedem "Übernehmen" beginnt es von vorn
+function mikSitzungsTimerStarten() {
+    clearTimeout(micSessionTimer);
+    micSessionTimer = setTimeout(() => {
+        if (!isListening || !recognition) return;
+        mikStatusSetzen("Zeitlimit erreicht.");
+        recognition.stop();
+    }, MIC_SESSION_MS);
 }
 
 // Beendet das aktuelle Recognition-Objekt endgültig, damit keine
