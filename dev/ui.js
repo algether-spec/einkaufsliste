@@ -188,6 +188,7 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId(), _batc
         applyPhotoCaption(photoCaption, false);
     } else {
         li.textContent = rawText;
+        li.addEventListener("click", () => eintragBearbeiten(li));
     }
 
     if (erledigt) li.classList.add("erledigt");
@@ -255,6 +256,29 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId(), _batc
     }
 
     liste.appendChild(li);
+}
+
+
+/* --- Bearbeiten -------------------------------------------------- */
+
+function eintragBearbeiten(li) {
+    if (modus !== MODUS_ERFASSEN) return;
+    const alt = li.dataset.rawText || "";
+    const eingabe = window.prompt("Eintrag bearbeiten:", alt);
+    if (eingabe === null) return;
+
+    const neu = eingabe.trim().slice(0, MAX_TEXT_LENGTH);
+    if (!neu) {
+        mikStatusSetzen("Leerer Eintrag – nicht geändert.");
+        return;
+    }
+    if (neu === alt) return;
+
+    li.dataset.rawText = neu;
+    li.dataset.text = neu;
+    li.textContent = neu;
+    speichern();
+    mikStatusSetzen("Eintrag geändert.");
 }
 
 
