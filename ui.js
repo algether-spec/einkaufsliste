@@ -264,12 +264,12 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId(), _batc
 function eintragBearbeiten(li) {
     if (modus !== MODUS_ERFASSEN) return;
     const alt = li.dataset.rawText || "";
-    const eingabe = window.prompt("Eintrag bearbeiten:", alt);
+    const eingabe = window.prompt("Eintrag bearbeiten (Text leeren = löschen):", alt);
     if (eingabe === null) return;
 
     const neu = eingabe.trim().slice(0, MAX_TEXT_LENGTH);
     if (!neu) {
-        mikStatusSetzen("Leerer Eintrag – nicht geändert.");
+        eintragLoeschenNachFrage(li, alt);
         return;
     }
     if (neu === alt) return;
@@ -279,6 +279,16 @@ function eintragBearbeiten(li) {
     li.textContent = neu;
     speichern();
     mikStatusSetzen("Eintrag geändert.");
+}
+
+function eintragLoeschenNachFrage(li, text) {
+    if (!window.confirm(`„${text}“ löschen?`)) {
+        mikStatusSetzen("Nicht gelöscht.");
+        return;
+    }
+    li.remove();
+    speichern();
+    mikStatusSetzen("Eintrag gelöscht.");
 }
 
 
