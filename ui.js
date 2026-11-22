@@ -187,7 +187,7 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId(), _batc
 
         applyPhotoCaption(photoCaption, false);
     } else {
-        li.textContent = rawText;
+        eintragTextAnzeigen(li, rawText);
         li.addEventListener("click", () => eintragBearbeiten(li));
     }
 
@@ -264,28 +264,43 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId(), _batc
 function eintragBearbeiten(li) {
     if (modus !== MODUS_ERFASSEN) return;
     const alt = li.dataset.rawText || "";
-    const eingabe = window.prompt("Eintrag bearbeiten (Text leeren = löschen):", alt);
+    const eingabe = window.prompt("Eintrag bearbeiten:", alt);
     if (eingabe === null) return;
 
     const neu = eingabe.trim().slice(0, MAX_TEXT_LENGTH);
     if (!neu) {
-        eintragLoeschenNachFrage(li, alt);
+        mikStatusSetzen("Leerer Eintrag – nicht geändert. Zum Löschen ✕ tippen.");
         return;
     }
     if (neu === alt) return;
 
     li.dataset.rawText = neu;
     li.dataset.text = neu;
-    li.textContent = neu;
+    eintragTextAnzeigen(li, neu);
     speichern();
     mikStatusSetzen("Eintrag geändert.");
 }
 
-function eintragLoeschenNachFrage(li, text) {
-    if (!window.confirm(`„${text}“ löschen?`)) {
-        mikStatusSetzen("Nicht gelöscht.");
-        return;
-    }
+function eintragTextAnzeigen(li, text) {
+    const span = document.createElement("span");
+    span.className = "eintrag-text";
+    span.textContent = text;
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "eintrag-loeschen";
+    deleteBtn.textContent = "✕";
+    deleteBtn.setAttribute("aria-label", `„${text}“ löschen`);
+    deleteBtn.onclick = event => {
+        event.stopPropagation();
+        eintragLoeschen(li);
+    };
+
+    li.replaceChildren(span, deleteBtn);
+}
+
+function eintragLoeschen(li) {
+    if (modus !== MODUS_ERFASSEN) return;
     li.remove();
     speichern();
     mikStatusSetzen("Eintrag gelöscht.");
