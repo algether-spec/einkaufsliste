@@ -6,7 +6,12 @@
 -- Der alte Client liest Join-Tokens und Einladungen direkt aus den Tabellen
 -- und würde nach diesem Schritt neue Gäste nicht mehr verbinden können.
 --
--- Ausführen: Supabase Dashboard → SQL Editor → komplett ausführen.
+-- VORAUSSETZUNG Erinnerungen-App: ab v1.0.51 auf main (nutzt dieselben Tabellen).
+--
+-- Ausführen: Supabase Dashboard → SQL Editor → NICHTS markieren →
+-- komplett ausführen. Mehrfaches Ausführen ist unschädlich.
+-- Bei Erfolg erscheint eine Tabelle mit genau 9 Regeln, bei einer
+-- Abweichung eine Fehlermeldung und es wird ALLES zurückgerollt.
 -- =============================================================
 
 
@@ -137,10 +142,32 @@ with check (
 
 
 -- -------------------------------------------------------------
--- Prüfung: erwartet genau 9 Zeilen (je Tabelle select/insert/update),
--- jede mit has_sync_membership.
--- select tablename, policyname, cmd, qual, with_check
--- from pg_policies where schemaname = 'public'
---   and tablename in ('device_join_tokens', 'sync_invites', 'device_roles')
--- order by tablename, cmd;
+-- 4. Selbstkontrolle – bricht bei Abweichung ab (alles wird zurückgerollt)
 -- -------------------------------------------------------------
+do $$
+declare
+  v_count integer;
+  v_bad integer;
+begin
+  select count(*),
+         count(*) filter (
+           where roles <> '{authenticated}'
+              or coalesce(qual, '') || coalesce(with_check, '') not like '%has_sync_membership%'
+         )
+  into v_count, v_bad
+  from pg_policies
+  where schemaname = 'public'
+    and tablename in ('device_join_tokens', 'sync_invites', 'device_roles');
+
+  if v_count <> 9 or v_bad <> 0 then
+    raise exception 'KONTROLLE FEHLGESCHLAGEN: % Regeln, davon % offen (erwartet 9, 0 offen)', v_count, v_bad;
+  end if;
+end
+$$;
+
+-- Ergebnis anzeigen: erwartet genau 9 Zeilen, alle {authenticated}
+select tablename, policyname, cmd, roles
+from pg_policies
+where schemaname = 'public'
+  and tablename in ('device_join_tokens', 'sync_invites', 'device_roles')
+order by tablename, cmd;

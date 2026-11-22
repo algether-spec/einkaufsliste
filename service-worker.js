@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v1.0.171";
+const CACHE_VERSION = "v1.0.173";
 
 // Produktion (/einkaufsliste/) und Testversion (/einkaufsliste/dev/) teilen sich
 // dieselbe Domain und damit denselben CacheStorage → Caches pro Scope trennen.

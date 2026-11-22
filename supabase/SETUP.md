@@ -5,7 +5,7 @@
 2. SQL Editor oeffnen.
 3. Inhalt aus `supabase/schema.sql` ausfuehren.
 4. Danach `supabase/security_1.sql` ausfuehren.
-5. Danach `supabase/security_2.sql` ausfuehren (erst, wenn der Client ab v1.0.167 auf main ist).
+5. Danach `security_3_reminders.sql` (Erinnerungen-Repo) und dann `supabase/security_2.sql` ausfuehren (erst, wenn Einkaufsliste ab v1.0.167 und Erinnerungen ab v1.0.51 auf main sind).
 
 > **Achtung:** `schema.sql` allein setzt alte, offene Zugriffsregeln.
 > Wann immer `schema.sql` (erneut) ausgefuehrt wird – auch bei den Fehlerbildern unten –
