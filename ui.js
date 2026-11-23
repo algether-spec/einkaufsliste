@@ -70,8 +70,6 @@ function eingabeFehlerSetzen(text) {
 
 /* --- Listen-Rendering ------------------------------------------- */
 
-const longPressTimers = new WeakMap(); // { start: timerId, activate: timerId }
-
 function datenAusListeLesen() {
     const daten = [];
     liste.querySelectorAll("li").forEach((li, index) => {
@@ -193,44 +191,7 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId(), _batc
 
     if (erledigt) li.classList.add("erledigt");
 
-    const cancelLongPress = () => {
-        const timers = longPressTimers.get(li);
-        if (!timers) return;
-        clearTimeout(timers.activate);
-        longPressTimers.delete(li);
-        li.classList.remove("pending");
-    };
-
-    li.addEventListener("pointerdown", e => {
-        if (modus !== MODUS_EINKAUFEN) return;
-        e.preventDefault();
-        li.setPointerCapture(e.pointerId); // Finger-Bewegung außerhalb verhindert kein Cancel
-        cancelLongPress();
-
-        const timers = { activate: null };
-        longPressTimers.set(li, timers);
-
-        // Sofort pending zeigen, nach 250ms auslösen
-        li.classList.add("pending");
-
-        timers.activate = setTimeout(() => {
-            if (!longPressTimers.has(li)) return;
-            longPressTimers.delete(li);
-            li.classList.remove("pending");
-            if (li.classList.contains("erledigt")) {
-                li.classList.remove("erledigt");
-            } else {
-                li.classList.add("erledigt");
-            }
-            listeNachGruppenSortieren();
-            speichern();
-        }, 250);
-    });
-
-    // pointerleave entfernt – setPointerCapture verhindert Fehlauslösungen
-    li.addEventListener("pointerup",     cancelLongPress);
-    li.addEventListener("pointercancel", cancelLongPress);
-    li.addEventListener("contextmenu",   e => e.preventDefault());
+    abhakenPerTippEinrichten(li);
 
     if (_batchTarget) {
         _batchTarget.appendChild(li);
@@ -256,6 +217,41 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId(), _batc
     }
 
     liste.appendChild(li);
+}
+
+
+/* --- Abhaken (Einkaufen) ----------------------------------------- */
+
+// Nur ein kurzes, ruhiges Antippen hakt ab. Scrollen, Wischen oder ein
+// aufliegender Daumen (einhändiges Halten) lösen nichts aus.
+const TIPP_MAX_DAUER_MS = 500;
+const TIPP_MAX_BEWEGUNG_PX = 10;
+
+function abhakenPerTippEinrichten(li) {
+    let start = null;
+    const abbrechen = () => { start = null; };
+
+    li.addEventListener("pointerdown", e => {
+        if (modus !== MODUS_EINKAUFEN || !e.isPrimary) return abbrechen();
+        start = { x: e.clientX, y: e.clientY, zeit: Date.now() };
+    });
+    li.addEventListener("pointermove", e => {
+        if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > TIPP_MAX_BEWEGUNG_PX) abbrechen();
+    });
+    li.addEventListener("pointerup", () => {
+        const warTipp = start && Date.now() - start.zeit <= TIPP_MAX_DAUER_MS;
+        abbrechen();
+        if (warTipp && modus === MODUS_EINKAUFEN) erledigtUmschalten(li);
+    });
+    li.addEventListener("pointercancel", abbrechen);
+    li.addEventListener("pointerleave", abbrechen);
+    li.addEventListener("contextmenu", e => e.preventDefault());
+}
+
+function erledigtUmschalten(li) {
+    li.classList.toggle("erledigt");
+    listeNachGruppenSortieren();
+    speichern();
 }
 
 
