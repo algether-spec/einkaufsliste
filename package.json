@@ -1,7 +1,7 @@
 {
   "name": "einkaufsliste-v2",
   "private": true,
-  "version": "1.0.175-dev",
+  "version": "1.0.175",
   "description": "Offline-faehige Einkaufsliste als Progressive Web App",
   "scripts": {
     "check:syntax": "for f in config.js utils.js supabase.js sync.js ui.js app.js service-worker.js; do node --check $f || exit 1; done",
