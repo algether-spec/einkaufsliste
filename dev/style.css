@@ -514,6 +514,10 @@ body.modus-einkaufen #liste li {
     border-left-color: #f87171;
     background: #fee2e2;
     color: #9ca3af;
+}
+
+#liste li.erledigt .eintrag-text,
+#liste li.erledigt .list-photo-caption-text {
     text-decoration: line-through;
 }
 
@@ -595,7 +599,15 @@ body.modus-einkaufen #liste li {
 }
 
 body.modus-einkaufen .eintrag-loeschen {
-    display: none;
+    width: 44px;
+    height: 44px;
+}
+
+#liste li.erledigt .eintrag-loeschen,
+#liste li.erledigt .list-photo-delete {
+    background: #f3f4f6;
+    border-color: #d1d5db;
+    color: #374151;
 }
 
 .list-photo-delete {

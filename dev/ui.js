@@ -137,13 +137,7 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId(), _batc
         const deleteBtn = document.createElement("button");
         deleteBtn.type = "button";
         deleteBtn.className = "list-photo-delete";
-        deleteBtn.textContent = "Löschen";
-        deleteBtn.onclick = event => {
-            event.stopPropagation();
-            li.remove();
-            speichern();
-            mikStatusSetzen("Foto gelöscht.");
-        };
+        loeschKnopfEinrichten(li, deleteBtn, "Löschen", "Zurück");
 
         const captionText = document.createElement("div");
         captionText.className = "list-photo-caption-text";
@@ -190,8 +184,7 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId(), _batc
     }
 
     if (erledigt) li.classList.add("erledigt");
-
-    abhakenPerTippEinrichten(li);
+    loeschKnopfBeschriften(li);
 
     if (_batchTarget) {
         _batchTarget.appendChild(li);
@@ -220,38 +213,40 @@ function eintragAnlegen(text, erledigt = false, itemId = generateItemId(), _batc
 }
 
 
-/* --- Abhaken (Einkaufen) ----------------------------------------- */
+/* --- Löschen / Abhaken ------------------------------------------- */
 
-// Nur ein kurzes, ruhiges Antippen hakt ab. Scrollen, Wischen oder ein
-// aufliegender Daumen (einhändiges Halten) lösen nichts aus.
-const TIPP_MAX_DAUER_MS = 500;
-const TIPP_MAX_BEWEGUNG_PX = 10;
+// Erfassen: Knopf löscht sofort.
+// Einkaufen: Knopf markiert rot (erledigt), nochmal = zurück.
+// Endgültig gelöscht wird beim Wechsel zurück zu Erfassen.
+function loeschKnopfEinrichten(li, btn, loeschenText, zurueckText) {
+    btn.dataset.loeschen = loeschenText;
+    btn.dataset.zurueck = zurueckText;
+    btn.onclick = event => {
+        event.stopPropagation();
+        if (modus === MODUS_EINKAUFEN) erledigtUmschalten(li);
+        else eintragLoeschen(li);
+    };
+}
 
-function abhakenPerTippEinrichten(li) {
-    let start = null;
-    const abbrechen = () => { start = null; };
-
-    li.addEventListener("pointerdown", e => {
-        if (modus !== MODUS_EINKAUFEN || !e.isPrimary) return abbrechen();
-        start = { x: e.clientX, y: e.clientY, zeit: Date.now() };
-    });
-    li.addEventListener("pointermove", e => {
-        if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > TIPP_MAX_BEWEGUNG_PX) abbrechen();
-    });
-    li.addEventListener("pointerup", () => {
-        const warTipp = start && Date.now() - start.zeit <= TIPP_MAX_DAUER_MS;
-        abbrechen();
-        if (warTipp && modus === MODUS_EINKAUFEN) erledigtUmschalten(li);
-    });
-    li.addEventListener("pointercancel", abbrechen);
-    li.addEventListener("pointerleave", abbrechen);
-    li.addEventListener("contextmenu", e => e.preventDefault());
+function loeschKnopfBeschriften(li) {
+    const btn = li.querySelector("[data-loeschen]");
+    if (!btn) return;
+    const erledigt = li.classList.contains("erledigt");
+    btn.textContent = erledigt ? btn.dataset.zurueck : btn.dataset.loeschen;
+    btn.setAttribute("aria-label", erledigt ? "Zurückholen" : "Löschen");
 }
 
 function erledigtUmschalten(li) {
     li.classList.toggle("erledigt");
+    loeschKnopfBeschriften(li);
     listeNachGruppenSortieren();
     speichern();
+}
+
+function eintragLoeschen(li) {
+    li.remove();
+    speichern();
+    mikStatusSetzen(li.classList.contains("foto-eintrag") ? "Foto gelöscht." : "Eintrag gelöscht.");
 }
 
 
@@ -285,21 +280,10 @@ function eintragTextAnzeigen(li, text) {
     const deleteBtn = document.createElement("button");
     deleteBtn.type = "button";
     deleteBtn.className = "eintrag-loeschen";
-    deleteBtn.textContent = "✕";
-    deleteBtn.setAttribute("aria-label", `„${text}“ löschen`);
-    deleteBtn.onclick = event => {
-        event.stopPropagation();
-        eintragLoeschen(li);
-    };
+    loeschKnopfEinrichten(li, deleteBtn, "✕", "↩");
 
     li.replaceChildren(span, deleteBtn);
-}
-
-function eintragLoeschen(li) {
-    if (modus !== MODUS_ERFASSEN) return;
-    li.remove();
-    speichern();
-    mikStatusSetzen("Eintrag gelöscht.");
+    loeschKnopfBeschriften(li);
 }
 
 
